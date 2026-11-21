@@ -829,10 +829,14 @@ commands.register("builder.inspect", async () => {
 // changes.
 views.onShow("builder.list", async () => {
   const root = (await workspace.root()) || "";
-  // A scan that is going is what the panel waits for, and one that never
-  // ran is what this starts: the view is shown before the folder's build
-  // systems are known in both cases.
-  if (scanning) return;
+  // A view is shown before the folder's build systems are known whenever a
+  // scan is going, so it is drawn as it is, which is the spinner, rather
+  // than left as it was under another view. A scan that is going already
+  // reads the folder as it is now, and one that is not starts.
+  if (scanning) {
+    await renderList();
+    return;
+  }
   if (!scanned || scanRoot !== root) await scanFolder();
   else await renderList();
 });
@@ -868,6 +872,18 @@ events.on("workspace.changed", () => {
 // And once as the plugin starts: a view shown while this code was still
 // being read asked its plugin for a tree before it could answer, and the
 // view then stood empty until it was shown again.
-void renderList();
+//
+// The scan starts here too, and not only when the view is shown. A plugin
+// starts when the editor does, and a sidebar that already shows this view
+// is never shown again: nothing would ask for the folder's build systems,
+// and the panel would stand empty until a person switched away and back,
+// which is the one thing an empty panel must not need.
+//
+// It starts a turn later, and is not awaited: Mayoi gives a plugin two
+// seconds to load, and a scan of a folder that runs a program to find its
+// targets outlasts that. A scan that ran here would fail the load itself,
+// and the plugin would be off, which is far worse than a panel that fills
+// a moment late.
+setTimeout(() => { void scanFolder(); }, 0);
 
 

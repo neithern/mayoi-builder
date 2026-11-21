@@ -20,6 +20,7 @@ import {
 } from "./types";
 import cargo from "./cargo";
 import cmake from "./cmake";
+import go from "./go";
 import meson from "./meson";
 import swift from "./swift";
 import make from "./make";
@@ -28,7 +29,7 @@ import xcode from "./xcode";
 // builders are the build systems known, in the order the panel tries them
 // when nothing else says which one builds: the one that builds the most
 // projects first.
-const builders: Builder[] = [cargo, cmake, meson, swift, make, xcode];
+const builders: Builder[] = [cargo, cmake, go, meson, swift, make, xcode];
 
 // Found is a build system a folder has.
 export interface Found {
@@ -175,6 +176,19 @@ export async function scan(
       notes.push(builder.id + ": " + String(e));
     }
     if (!rough) continue;
+    // A build system whose own files name no target has to be asked, when
+    // there is a program to ask: a go.mod says a module and nothing about
+    // the programs it builds, and reading every .go file for one is a scan
+    // past what its cost allows. It is asked last of the targets, and a
+    // tool that is missing leaves the guess as it was.
+    if (!rough.targets.length && builder.ask) {
+      try {
+        const asked = await builder.ask(root, rough);
+        if (asked && asked.length) rough.targets = asked;
+      } catch (e) {
+        notes.push(builder.id + ": " + String(e));
+      }
+    }
     const entry: Found = { builder, rough, tasks: [], isDefault: false };
     found.push(entry);
     if (onFound) onFound(entry);

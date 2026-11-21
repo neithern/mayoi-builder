@@ -37,7 +37,7 @@ export interface Matcher {
 }
 
 // BuilderId is one build system this plugin knows.
-export type BuilderId = "cargo" | "cmake" | "meson" | "swift" | "make" | "xcode";
+export type BuilderId = "cargo" | "cmake" | "go" | "meson" | "swift" | "make" | "xcode";
 
 // Problem is a matcher of a build system's own, named for the messages it
 // reads. Every build system that compiles C, C++ or Swift says a problem
@@ -122,6 +122,10 @@ export interface Target {
   kind: "executable" | "library" | "recipe" | "bin" | "product" | "member";
   // detail says what the name alone does not, as where it was declared.
   detail?: string;
+  // path is what the build system's own command takes for this target,
+  // when a name is not enough: a Go program is built by its package path,
+  // since two packages may share the name of the binary they write.
+  path?: string;
   // guessed marks a target whose name was worked out rather than read: a
   // variable that could not be followed, or a build file that could not be
   // parsed. The panel says so, since a guess is what a person checks first.
@@ -169,6 +173,7 @@ export interface Builder {
 export const markerFiles: string[] = [
   "Cargo.toml",
   "CMakeLists.txt",
+  "go.mod",
   "meson.build",
   "Package.swift",
   "GNUmakefile",

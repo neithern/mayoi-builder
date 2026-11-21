@@ -21,6 +21,7 @@
   "activation": [
     "workspaceContains:Cargo.toml",
     "workspaceContains:CMakeLists.txt",
+    "workspaceContains:go.mod",
     "workspaceContains:meson.build",
     "workspaceContains:Package.swift",
     "workspaceContains:Makefile",
