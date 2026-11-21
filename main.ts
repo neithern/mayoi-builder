@@ -99,14 +99,19 @@ function groupKind(group: Task["group"]): { kind: string; isDefault: boolean } {
   return { kind: group.kind || "", isDefault: !!group.isDefault };
 }
 
+// folderName is the last part of a folder's path, which is what a project
+// is usually called.
+function folderName(path: string): string {
+  const at = path.replace(/\/+$/, "").lastIndexOf("/");
+  return at >= 0 ? path.slice(at + 1) : path;
+}
+
 // commandOf is what a task would run, as a person would type it: its
-// program and its arguments. A shell task names the whole line, which is
-// its command.
+// program and its arguments. A shell task names a whole line, which is its
+// command, and is cut since a tooltip holds a line and not a script.
 function commandOf(task: Task): string {
   const line = [task.command, ...(task.args || [])].join(" ");
-  // A configure step written as a shell line is long, and the panel has
-  // one line to give: what it runs is enough, and where it starts is not.
-  return line.length > 64 ? line.slice(0, 61) + "…" : line;
+  return line.length > 72 ? line.slice(0, 69) + "…" : line;
 }
 
 // taskKey is what a task is kept by: its build system and its label.
@@ -372,11 +377,15 @@ async function renderListNow(): Promise<void> {
   const items = findings.map((entry) => {
     const notes = builders.notesOf(entry);
     const going = entry.tasks.some((task) => running.has(taskKey(task)));
+    // The group is the project, and its row says which build system read
+    // it: a folder of three build systems names one project three times
+    // otherwise, which says less than the build system does. What is wrong
+    // with the project is more to the point than either.
     const description = going
       ? say("builder.runningMark")
       : notes.length
         ? notes.join(" · ")
-        : entry.rough.title || "";
+        : entry.builder.id;
     const rows = entry.tasks.map((task) => {
       const key = taskKey(task);
       const was = history[key];
@@ -384,12 +393,15 @@ async function renderListNow(): Promise<void> {
       let mark = "";
       if (isRunning) mark = say("builder.runningMark");
       else if (was) mark = was.code === 0 ? "✓" : "✗";
-      // The one Build runs says so beside its name; every other row says
-      // what it would run, which is the command and its arguments as a
-      // person would type them. A result or a run in progress is more to
-      // the point than either, and takes the place.
+      // A row says its task's name, and how its last run went. Which build
+      // system it is of, its group says; what it would run, the log of a
+      // run says, and the tooltip of its button names the command, since a
+      // row of a view takes no tooltip of its own.
+      //
+      // The one Build runs says so, which a person looking for the button
+      // to press is the one thing they need from this list.
       const isBuild = key === built;
-      const detail = mark || (isBuild ? say("builder.defaultBuild") : commandOf(task));
+      const detail = mark || (isBuild ? say("builder.defaultBuild") : "");
       return {
         key,
         label: task.label,
@@ -400,14 +412,18 @@ async function renderListNow(): Promise<void> {
         },
         actions: [{
           icon: "check",
-          tooltip: say("builder.runOne"),
+          tooltip: say("builder.runOne") + ": " + commandOf(task),
           onClick: () => { void runAndShow(task); },
         }],
       };
     });
     return {
       key: "builder-" + entry.builder.id,
-      label: entry.builder.id + (entry.rough.title ? " · " + entry.rough.title : ""),
+      // The project's own name when its build system says one, else the
+      // folder's: a group named for its build system says what the
+      // description already says, and a folder of one project has one of
+      // those names.
+      label: entry.rough.title || folderName(scanRoot),
       description,
       open: true,
       actions: [reload],

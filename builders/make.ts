@@ -90,7 +90,10 @@ async function guess(root: string): Promise<Rough | null> {
     if (wraps) break;
   }
 
-  return { targets, title: file, wraps: wraps || undefined };
+  // No title: a Makefile names no project, and its own name says only
+  // what the file is, which the panel already says. Leaving it empty lets
+  // the group be the folder's name, which is the project a person knows.
+  return { targets, wraps: wraps || undefined };
 }
 
 // tasks are one per target: what make would be given is the target's name,
