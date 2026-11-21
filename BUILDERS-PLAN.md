@@ -95,6 +95,45 @@
 | 无目录列举 | 只有 glob 的 `findFiles`，且匹配在主线程 | 暴露 `workspace.readDir(path)` |
 | 无流式进程输出 | `process.run` 缓冲式 | 暴露 `process.spawn`（约 40 行） |
 | `button` 无 icon/disabled | `pluginviews.go:423` | 读 `Icon` 与 `Disabled`（约 10 行） |
+| `code` 节点不能单独滚动 | 见 3.1 | 读 `Height` 并改为可滚动区域（约 10 行） |
+| `viewItem` 无 tooltip | 见 3.2 | 加 `Tooltip` 字段并传给行（约 5 行） |
+
+### 3.1 `code` 节点不能单独滚动（阻碍日志面板）
+
+**现状**（`pluginviews.go:350-352`）：
+
+```go
+case "code":
+    ui.Text(c.Key(key), n.Text).Font(a.settings.FontFamily).
+        FontSize(a.settings.FontSize*0.9).TextColor(p.text).
+        Background(p.surfaceHover).Padding(6, 8).Radius(5).Selectable()
+```
+
+三个事实叠加，导致日志无法与任务列表分开滚动：
+
+1. **整个视图只有一个滚动容器**：`ui.Scroll(...)` 包住整棵树（`:300`）。
+2. **`code` 节点不读 `Height`**：`viewNode` 有 `Height` 字段（`:39`），
+   但 `code` 分支完全没用它——`svg` 分支用了（`:367-371`）。
+3. **`mayoi.d.ts` 里 `code` 根本没有 `height`**（`:212`）：
+   `{ type: "code"; text: string; language?: string }`。
+
+**后果**：构建输出与任务列表共用一个滚动区域，日志一长就把任务挤出视野。
+本插件只能退而限制行数（当前保留尾部 200 行）。
+
+**建议**：`case "code"` 在 `n.Height > 0` 时套一层 `ui.Scroll` 并设固定高度，
+同时给 `mayoi.d.ts` 的 `code` 加 `height?: number`。约 10 行。
+
+### 3.2 `viewItem` 没有 tooltip
+
+**现状**：`viewItem`（`pluginviews.go:67-81`）的字段只有
+`Key/Label/Description/Icon/OnClick/Actions/Children/Open`，没有 `Tooltip`。
+只有 `viewAction` 有（`:85`），且只用于悬停按钮（`:575`）。
+
+**后果**：任务行无法在悬停时显示完整命令，只能挂到运行按钮的 tooltip 上
+（`执行: ./gradlew assembleDebug`）。悬停整行没有任何提示。
+
+**建议**：`viewItem` 加 `Tooltip string`，`viewRow` 里 `row.Label(it.Label)` 旁边
+串一个 `.Tooltip(it.Tooltip)`。约 5 行，对既有视图无影响。
 
 ---
 
