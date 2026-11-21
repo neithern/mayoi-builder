@@ -1,5 +1,7 @@
 # mayoi-builder
 
+[中文](README.zh-CN.md)
+
 A [Mayoi](https://github.com/sorrycc/Mayoi) plugin that finds a folder's
 build systems and puts their tasks in a sidebar view, without a task file
 to write by hand.
@@ -30,7 +32,7 @@ once would put two task panels in the sidebar.
 
 | Command | What |
 | --- | --- |
-| **Builders: Build** (`builder.build`) | Runs the folder's default build |
+| **Default Build** (`builder.build`) | Runs the folder's default build |
 | **Run Build Task…** (`builder.run`) | Lists every task found |
 | **Rerun Last Build task** (`builder.rerunLast`) | Runs the one that ran last |
 | **Scan Builders Again** (`builder.reload`) | Reads the folder again |
