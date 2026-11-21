@@ -192,24 +192,44 @@ export async function scan(
 }
 
 // order puts the build system that builds the folder first: the one the
-// settings name, then one whose recipes run another build system, then the
-// order of the list.
+// settings name, then one a recipe runs, then a recipe that runs one, then
+// the order of the list.
 //
-// The middle rule is what a project of several build systems needs: a
-// Makefile that runs xcodebuild is the folder's build, and Xcode is what
-// it runs, so the Makefile is what Build runs.
+// The middle rule is what a project of several build systems needs. A
+// Makefile that runs swift build is a shell over Swift: the tasks that
+// come of it are Swift's, so Swift is what a person is looking at, and
+// the Makefile is the way it is run. So the build system a recipe names
+// comes first, and the recipe second.
 function order(found: Found[], config: Config): void {
-  found.sort((a, b) => rank(a) - rank(b) || builders.indexOf(a.builder) - builders.indexOf(b.builder));
+  const named = recipeRuns(found);
+  found.sort((a, b) => {
+    const ra = rank(a, named);
+    const rb = rank(b, named);
+    return ra - rb || builders.indexOf(a.builder) - builders.indexOf(b.builder);
+  });
   if (config.prefer) {
     const at = found.findIndex((f) => f.builder.id === config.prefer);
     if (at > 0) found.unshift(found.splice(at, 1)[0]);
   }
 }
 
-// rank is how much a build system is the folder's build: 0 for one whose
-// recipes run another build system, 1 for the rest.
-function rank(found: Found): number {
-  return found.rough.wraps ? 0 : 1;
+// recipeRuns is the build system a Makefile's recipes run, when that build
+// system is here as well: a Makefile that runs swift build in a folder of
+// only a Makefile is just a Makefile.
+function recipeRuns(found: Found[]): string {
+  for (const entry of found) {
+    const wraps = entry.rough.wraps;
+    if (wraps && found.some((other) => other.builder.id === wraps)) return wraps;
+  }
+  return "";
+}
+
+// rank is how much a build system is the folder's build: 0 for the one a
+// recipe runs, 1 for a recipe that runs one, 2 for the rest.
+function rank(found: Found, named: string): number {
+  if (named && found.builder.id === named) return 0;
+  if (found.rough.wraps) return 1;
+  return 2;
 }
 
 // addExtra adds the tasks .mayoi/builders.json gives by hand, after the

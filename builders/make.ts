@@ -75,25 +75,50 @@ async function guess(root: string): Promise<Rough | null> {
     recipes.set(name, recipes.get(name) || []);
   }
 
-  // A recipe that runs another build system makes this Makefile the
-  // folder's build: a project of three build systems builds through the
-  // one that names them, and a person running make would get the same.
+  // A recipe that runs another build system says which one the folder
+  // really builds with: a project of three build systems builds through
+  // one of them, and the tasks that one makes are the ones to offer first.
   // This is for the order alone, and not a thing to show.
-  let wraps = "";
-  for (const [, list] of recipes) {
-    for (const line of list) {
-      for (const other of ["xcodebuild", "swift build", "cargo build", "cmake", "meson"]) {
-        if (line.includes(other)) { wraps = other; break; }
-      }
-      if (wraps) break;
-    }
-    if (wraps) break;
-  }
+  const wraps = wrapped(text);
 
   // No title: a Makefile names no project, and its own name says only
   // what the file is, which the panel already says. Leaving it empty lets
   // the group be the folder's name, which is the project a person knows.
   return { targets, wraps: wraps || undefined };
+}
+
+// wrapped is the build system a Makefile's recipes run, by the name a
+// person would type: xcodebuild is Xcode, swift build is Swift, and so on.
+// What a recipe does is read from the whole file rather than from each
+// target, since a recipe may call a variable that holds the command.
+//
+// It answers with the build system's id, or "" for one that builds its own,
+// and a tool it wraps that this plugin has no reader for counts as none.
+function wrapped(text: string): string {
+  // The most specific first: "swift build" and "swift package" are Swift,
+  // and xcodebuild builds the same project Xcode does.
+  const calls: [string, string][] = [
+    ["swift build", "swift"],
+    ["swift package", "swift"],
+    ["swift test", "swift"],
+    ["xcodebuild", "xcode"],
+    ["cargo build", "cargo"],
+    ["cargo test", "cargo"],
+    ["meson", "meson"],
+    ["cmake", "cmake"],
+  ];
+  // Only a recipe line counts: a comment naming a tool is not a recipe
+  // that runs it, which a Makefile does freely ("extra build settings for
+  // xcodebuild"). A recipe is a line that starts with a tab.
+  const bodies = text
+    .split("\n")
+    .filter((line) => line.startsWith("\t"))
+    .map((line) => line.replace(/^\t[@-]*/, ""))
+    .filter((body) => body && !body.startsWith("#"));
+  for (const [call, id] of calls) {
+    if (bodies.some((body) => body.includes(call))) return id;
+  }
+  return "";
 }
 
 // tasks are one per target: what make would be given is the target's name,
