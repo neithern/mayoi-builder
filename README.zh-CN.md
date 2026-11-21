@@ -113,7 +113,6 @@ Android 项目的**默认构建**是 `assembleDebug`，不是 `build`。`build` 
 ## 它不做什么
 
 - **不做调试。** 这里没有 DAP 客户端：这个插件只跑构建。
-- **不读 `.vscode/tasks.json`。** 那是 `mayoi-tasks` 的事；两个都装会有两个面板。
 - **不支持 `dependsOn`。** 一个任务单独跑。
 - **没有终端。** Mayoi 的插件 API 没有终端，所以输出是标签页，问题是面板。
 

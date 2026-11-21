@@ -124,8 +124,6 @@ Optional, in the folder. Comments and trailing commas are allowed.
 ## What it does not do
 
 - **No debugging.** There is no DAP client here: this plugin runs builds.
-- **No `.vscode/tasks.json`.** That is `mayoi-tasks`; installing both puts
-  two panels in the sidebar.
 - **No `dependsOn`.** A task runs alone.
 - **No terminal.** Mayoi's plugin API has no terminal, so output is a tab
   and the problems are the panel.
