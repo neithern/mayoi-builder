@@ -1,0 +1,98 @@
+{
+  "name": "builder",
+  "displayName": "Builders",
+  "version": "0.1.0",
+  "description": "The build tasks of a folder's build system, found from what the project already declares",
+  "author": "Nanling",
+  "repository": "https://github.com/neithern/builder",
+  "license": "MIT",
+  "keywords": [
+    "build",
+    "cargo",
+    "cmake",
+    "meson",
+    "swift",
+    "make",
+    "xcode"
+  ],
+  "mayoi": ">=0.23.0",
+  "main": "main.ts",
+  "enabled": false,
+  "activation": [
+    "workspaceContains:Cargo.toml",
+    "workspaceContains:CMakeLists.txt",
+    "workspaceContains:meson.build",
+    "workspaceContains:Package.swift",
+    "workspaceContains:Makefile",
+    "workspaceContains:GNUmakefile",
+    "workspaceContains:makefile",
+    "onCommand:builder.run",
+    "onCommand:builder.build",
+    "onCommand:builder.rerunLast",
+    "onCommand:builder.reload",
+    "onView:builder.list"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "id": "builder.build",
+        "title": "Default Build",
+        "title:zh-Hans": "默认构建",
+        "title:ja": "既定のビルド"
+      },
+      {
+        "id": "builder.run",
+        "title": "Run Build Task…",
+        "title:zh-Hans": "运行构建任务…",
+        "title:ja": "ビルドタスクを実行…"
+      },
+      {
+        "id": "builder.rerunLast",
+        "title": "Rerun Last Build task",
+        "title:zh-Hans": "重新运行上次构建任务",
+        "title:ja": "前回のビルドタスクを再実行"
+      },
+      {
+        "id": "builder.reload",
+        "title": "Scan Builders Again",
+        "title:zh-Hans": "重新扫描构建器",
+        "title:ja": "ビルダーを再スキャン"
+      },
+      {
+        "id": "builder.inspect",
+        "title": "Inspect a Project's Build System…",
+        "title:zh-Hans": "精确内省项目构建系统…",
+        "title:ja": "プロジェクトのビルドシステムを詳細調査…"
+      },
+      {
+        "id": "builder.showList",
+        "title": "Show Builders",
+        "title:zh-Hans": "显示构建器",
+        "title:ja": "ビルダーを表示"
+      }
+    ],
+    "menus": {
+      "plugins": [
+        {
+          "command": "builder.build"
+        },
+        {
+          "command": "builder.run"
+        },
+        {
+          "command": "builder.rerunLast"
+        },
+        {
+          "command": "builder.reload"
+        }
+      ]
+    },
+    "views": [
+      {
+        "id": "builder.list",
+        "title": "Builders",
+        "icon": "box"
+      }
+    ]
+  }
+}

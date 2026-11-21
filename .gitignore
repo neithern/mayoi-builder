@@ -1,0 +1,10 @@
+# The type definitions of Mayoi's plugin API, fetched for tsc.
+mayoi.d.ts
+
+# npm, if a package is ever vendored in.
+node_modules/
+vendor/
+package.json
+package-lock.json
+
+.DS_Store
