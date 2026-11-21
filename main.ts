@@ -36,6 +36,12 @@ interface Log {
 // A scan of the folder, kept until the folder or its build files change:
 // drawing the panel reads this and never looks at the disk, since the
 // panel is drawn again on every line of a running build.
+//
+// One plugin serves every window, so the folder a scan read is checked
+// again whenever the panel is drawn or used. The view's tree is the
+// plugin's and not a window's, so two windows show one panel; what this
+// keeps right is that the tasks belong to the folder whose window asked,
+// which is the one in front.
 let scanned: builders.Scan | null = null;
 let scanRoot = "";
 // scanning is the scan going, and generation is the number of the scan
@@ -302,6 +308,37 @@ async function scanFolder(redraw = true): Promise<void> {
   }
 }
 
+// stale is whether the scan in hand is of another folder than the one in
+// front. A folder is the window's, and the plugin's is the one in front,
+// so opening a second window leaves this scanning for the first.
+//
+// The folder in front is asked at most once a tick: a draw happens on
+// every line of a running build, and asking the host each time is a call
+// per line for an answer that changes when a window does.
+let frontSeen = { at: 0, root: "" };
+async function frontRoot(): Promise<string> {
+  const now = Date.now();
+  if (now - frontSeen.at < 500) return frontSeen.root;
+  const root = (await workspace.root()) || "";
+  frontSeen = { at: now, root };
+  return root;
+}
+
+async function stale(): Promise<boolean> {
+  if (!scanned) return false;
+  return scanRoot !== (await frontRoot());
+}
+
+// ensureScanned reads the folder in front when the scan in hand is of
+// another one, and answers whether there is a scan at all.
+async function ensureScanned(): Promise<boolean> {
+  if (!scanned || (await stale())) {
+    await scanFolder();
+  }
+  // The folder may have changed again while the scan ran.
+  return !!scanned && scanRoot === ((await workspace.root()) || "");
+}
+
 // currentLog is the log the view draws: the task chosen, else none.
 // ported from mayoi-tasks
 function currentLog(): Log | null {
@@ -328,6 +365,14 @@ async function renderList(): Promise<void> {
 }
 
 async function renderListNow(): Promise<void> {
+  // Another window coming forward asks for a panel of its own folder, and
+  // the scan in hand is the one before it. It is started here, and what
+  // this draws is the spinner: a draw happens on every line of a running
+  // build, so a scan cannot be awaited in one.
+  if (!scanning && scanned && (await stale())) {
+    void scanFolder(false);
+  }
+
   const children: ViewNode[] = [];
   const reload = {
     icon: "refresh",
@@ -590,8 +635,11 @@ async function startLive(task: Task, command: string, argv: string[], cwd: strin
 
   return {
     done,
+    // append puts text after what the program printed, which is how the
+    // plugin says a thing of its own in the log: that a program that
+    // printed nothing built, and why one that failed did not start.
     append: (t: string) => {
-      shown = head + t;
+      shown = shown + t;
       void write();
     },
     text: () => shown.slice(head.length),
@@ -683,6 +731,13 @@ async function runTaskNow(task: Task): Promise<boolean> {
     live.append(String(e));
   }
   const out = live.text();
+  // A program that prints nothing is not one that did nothing, and a log
+  // that holds only the command looks like a run that never started. What
+  // it left behind is the answer a person came for: a build that says
+  // nothing has built, and one that failed says why in its own words.
+  if (!out.trim() && code === 0) {
+    live.append(say("builder.quiet") + "\n");
+  }
   await live.finish(code);
   const elapsed = Date.now() - began;
   const problems = await diagnose(task, out, ranPaths);
@@ -700,7 +755,10 @@ function allTasks(): Task[] {
 // pickTask shows the tasks, the default build first.
 // ported from mayoi-tasks
 async function pickTask(): Promise<Task | undefined> {
-  if (!scanned) await scanFolder();
+  if (!(await ensureScanned())) {
+    await window.notify("Builders: " + say("builder.noBuilders"));
+    return undefined;
+  }
   const tasks = allTasks();
   if (!tasks.length) {
     await window.notify("Builders: " + say("builder.noBuilders"));
@@ -754,7 +812,10 @@ commands.register("builder.run", async () => {
 });
 
 commands.register("builder.build", async () => {
-  if (!scanned) await scanFolder();
+  if (!(await ensureScanned())) {
+    await window.notify("Builders: " + say("builder.noTasks"));
+    return;
+  }
   const task = await byGroup("build");
   if (!task) {
     await window.notify("Builders: " + say("builder.noTask"));

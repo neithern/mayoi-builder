@@ -26,6 +26,7 @@ const en: Table = {
   "builder.initialised": "submodule not set up",
   "builder.oldPolicy": "old CMake policy",
   "builder.broken": "cannot be read",
+  "builder.quiet": "the command printed nothing, and finished",
   "builder.problems": "problems",
   "builder.defaultBuild": "default",
 };
@@ -49,6 +50,7 @@ const zhHans: Table = {
   "builder.initialised": "子模块未初始化",
   "builder.oldPolicy": "旧版 CMake 策略",
   "builder.broken": "无法读取",
+  "builder.quiet": "命令没有输出，已结束",
   "builder.problems": "个问题",
   "builder.defaultBuild": "默认",
 };
@@ -72,6 +74,7 @@ const ja: Table = {
   "builder.initialised": "サブモジュール未初期化",
   "builder.oldPolicy": "旧 CMake ポリシー",
   "builder.broken": "読み取れません",
+  "builder.quiet": "出力なしで終了しました",
   "builder.problems": "件の問題",
   "builder.defaultBuild": "既定",
 };

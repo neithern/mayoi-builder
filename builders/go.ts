@@ -79,7 +79,11 @@ function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
     label: "build",
     type: "process",
     command: "go",
-    args: ["build", "./..."],
+    // -v names each package as it is built, which is the only thing the
+    // go command says while it works: a build that succeeds prints
+    // nothing at all without it, and a panel that prints nothing looks
+    // like one that is not running.
+    args: ["build", "-v", "./..."],
     group: { kind: "build", isDefault },
     detail: "go",
     builder: "go",
@@ -95,7 +99,7 @@ function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
       // Without -o the program lands in the folder the command runs in,
       // which is what a person typing "go build ./cmd/app" gets, and what
       // a project's .gitignore already knows to leave out.
-      args: ["build", target.path || target.name],
+      args: ["build", "-v", target.path || target.name],
       group: "build",
       detail: target.detail,
       builder: "go",
