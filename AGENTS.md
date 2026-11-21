@@ -34,8 +34,10 @@ Logs from `console.log` and errors show in Mayoi under **Plugins: Show Log**.
 
 ## Rules this plugin keeps
 
-1. **A scan reads files and runs no program.** `guess` never writes and never spawns: a folder is
-   scanned without being changed, and a project without its toolchain still lists.
+1. **A scan reads files, and only `ask` runs a program.** `guess` never writes and never spawns:
+   a folder is scanned without being changed, and a project without its toolchain still lists.
+   A build system whose files cannot name its targets calls `ask` — Go's main packages and
+   Xcode's schemes — which runs the tool it belongs to and never writes a build directory.
 2. **A scan never lists the folder.** It asks for marker files by name. Listing grows with the
    project, and Mayoi matches a listing's globs on the thread that draws the window.
 3. **Every call is awaited.** A folder may be another machine, where each call is a round trip, so

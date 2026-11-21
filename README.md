@@ -46,13 +46,42 @@ and the problems in it go to **Show Problems**.
 | --- | --- | --- |
 | Cargo | `Cargo.toml` | workspace members, `[[bin]]` names |
 | CMake | `CMakeLists.txt` | `add_executable`, `add_library` |
+| Go | `go.mod` | main packages, from `go list` |
+| Gradle | `build.gradle`, `settings.gradle` | modules, from `include` |
 | Meson | `meson.build` | `executable()`, `library()` |
+| npm | `package.json` | its scripts |
 | Swift PM | `Package.swift` | `.executable(name:)`, `.library(name:)` |
 | Make | `GNUmakefile`, `Makefile`, `makefile` | its recipes |
 | Xcode | `*.xcodeproj` | schemes, on asking |
 
-A folder may have several: a Makefile that runs `xcodebuild` is the
-folder's build, and Xcode is what it runs, so **Build** runs the Makefile.
+A folder may have several. When a Makefile's recipes run another build
+system that is here as well, that one comes first and the Makefile second:
+a Makefile holding one `swift build` line is a shell over Swift, and
+Swift is where the tasks are.
+
+### Go
+
+`go.mod` names a module, not the programs it builds, so the main packages
+come from `go list`. A program is built and run by its package path
+(`./cmd/app`), never by its name. The build asks for `-v`, since `go
+build` prints nothing at all when it succeeds.
+
+### Gradle
+
+The project's own `./gradlew` runs, never a `gradle` a machine happens to
+have: the wrapper pins the version the project was built with.
+
+An Android project's **Build** is `assembleDebug`, not `build`. `build`
+assembles every variant, and the release one fails without a signing key,
+which most projects do not have set up. **build all** is the whole build,
+for a project that can sign.
+
+### npm
+
+Tasks are the `scripts` of `package.json`, and only the ones that are
+there. A lockfile decides which package manager runs them: `pnpm-lock.yaml`
+makes them `pnpm` scripts, since npm would resolve modules the folder was
+not set up with.
 
 ## How it reads a project
 
@@ -112,6 +141,20 @@ Optional, in the folder. Comments and trailing commas are allowed.
   inside an `#if` is missed, and `swift package describe` would find it.
 - **A Cargo member named by a pattern is not followed.** `members = ["crates/*"]`
   names a set that only a listing tells, and a scan does not list.
+- **Maven is not supported.** A folder with a `pom.xml` is not recognised.
+- **A Gradle project's tasks are the module's, not the project's.** The
+  build files are programs, and the tasks they make depend on plugins
+  resolved while they run, so a scan names the modules and the tasks every
+  module of that kind has.
+- **An Android project without an SDK says so, and cannot build.**
+  `local.properties` naming `sdk.dir` is what the panel looks for; the
+  `ANDROID_HOME` variable is not visible to a plugin.
+
+## One plugin, every window
+
+A plugin runs once for the app, not once per window, and the folder it
+reads is the window in front. So the panel shows the tasks of whichever
+window is in front, and follows a change of window.
 
 ## License
 

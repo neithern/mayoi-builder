@@ -112,7 +112,10 @@ mayoi-builder/
     index.ts           发现：根标记探测、派发、优先级、缓存、单飞
     cargo.ts
     cmake.ts
+    go.ts
+    gradle.ts
     meson.ts
+    npm.ts
     swift.ts
     make.ts
     xcode.ts
@@ -122,7 +125,7 @@ mayoi-builder/
   AGENTS.md
 ```
 
-`builders/` 是目录：六种构建器各有各的解析逻辑，彼此没有交集，加第七种只加一个文件。
+`builders/` 是目录：九种构建器各有各的解析逻辑，彼此没有交集，加第十种只加一个文件。
 `main.ts` 保持单文件：执行层是整块抄来的，拆开要处理抄来代码之间的引用。
 
 模块解析已核实（`internal/plugin/runtime.go:140`）：`./builders` → `builders/index.ts` 成立，
@@ -190,7 +193,10 @@ CMake 与 Meson 的 subdir 跟随**共用同一份 6 次预算**，按优先级�
 
 ---
 
-## 六、六种构建器
+## 六、九种构建器
+
+实测支持的九种：Cargo、CMake、Go、Gradle、Meson、npm、Swift、Make、Xcode。
+其中 Go 与 Xcode 必须走档 2（工具内省），其余七种静态解析即可出任务。
 
 ### 6.1 Cargo
 
@@ -300,7 +306,117 @@ libhttp 配好 libuv 后报 76 个 target，其中 72 个是 `UTILITY`（CTest �
 配置错误是两行结构（`CMake Error at CMakeLists.txt:3 (...):` 消息在下一行），
 逐行引擎表达不了，**原样留在日志里，不进问题面板**，写进 README 已知限制。
 
-### 6.3 Meson
+### 6.3 Go
+
+| 档 | 做法 | 写盘 |
+|---|---|---|
+| 1 | 根 `go.mod`：只取 `module` 名 | 否 |
+| 2 | `go list -f '{{if eq .Name "main"}}...{{end}}' ./...` | 否 |
+
+**Go 是第一个必须走档 2 的构建器。** `go.mod` 只说模块名，不说有哪些可执行程序；
+找出 `main` 包只能逐个读 `.go` 文件，而 Mayoi 仓库有 516 个 go 文件——
+远超单个构建器允许的读取上限，也违背「默认路径调用次数有上限」这条约束。
+
+`go list` 一次调用即可精确列出（本机实测 0.21s）：
+
+```
+mayoi/cmd/mayoi|/Users/nanling/Projects/git/Mayoi/cmd/mayoi
+mayoi/tools/icongen|/Users/nanling/Projects/git/Mayoi/tools/icongen
+```
+
+**生成规则**：
+
+| 任务 | 命令 | 组 |
+|---|---|---|
+| build | `go build -v ./...` | `{kind:"build", isDefault:true}` |
+| build <name> | `go build -v ./cmd/app` | build |
+| run <name> | `go run ./cmd/app` | — |
+| test | `go test ./...` | test |
+| vet | `go vet ./...` | — |
+
+三条实测得出的规则：
+
+1. **用包路径，不用名字**。`go build ./cmd/mayoi` 而非 `go build mayoi`：
+   两个包可能产出同名二进制，只有包路径能区分。`Target` 因此加了 `path` 字段。
+2. **必须加 `-v`**。`go build` 成功时**完全不输出**，面板上只剩一行命令，
+   看起来像卡住。全缓存命中时仍无输出，此时插件写「命令没有输出，已结束」。
+3. **不生成 `go run .`**。模块根目录通常不是 `main` 包，`go run .` 会报
+   `no Go files`。改为每个 `main` 包一条 `run <name>`。
+
+**matcher**：Go 输出无 severity 字样，整行按 error 处理——
+`./main.go:2:14: undefined: x`。
+
+### 6.4 Gradle
+
+| 档 | 做法 | 写盘 |
+|---|---|---|
+| 1 | `settings.gradle` 的 `include ':app', ':library'` + `rootProject.name` | 否 |
+| — | 不调 `gradle tasks`：那会配置整个工程，慢且可能触发插件解析 | — |
+
+**执行一律用 `./gradlew`，不用全局 `gradle`**。wrapper 锁定项目构建时的
+Gradle 版本（Televe 用 9.6.1），用别的版本构建出来的是另一个东西。
+
+**Android 判定**：build 文件是否引用 `com.android.application` / `com.android.library`。
+这个判定决定任务集合，是本节的核心事实：
+
+```
+./gradlew build          → 组装所有变体，release 需要签名密钥
+./gradlew assembleDebug  → 只组装 debug，不需要密钥
+```
+
+实测（Televe，未配签名）：
+
+| 命令 | 结果 |
+|---|---|
+| `:library:build` | 成功（库模块无签名配置） |
+| `:app:build` | **失败**：`Keystore file not set for signing config release` |
+| `:app:assembleDebug` | 成功 |
+
+所以 Android 项目的默认构建是 `assembleDebug`，不是 `build`：
+绝大多数项目没配签名密钥，用 `build` 会在**默认任务上必然失败**。
+
+**生成规则**：
+
+| 任务 | 命令 | 组 |
+|---|---|---|
+| build | `./gradlew assembleDebug`（Android）/ `./gradlew build`（其他） | `{kind:"build", isDefault:true}` |
+| build all | `./gradlew build`（仅 Android） | build |
+| build <module> | `./gradlew :<module>:assembleDebug`（Android） | build |
+| test | `./gradlew test` | test |
+| clean | `./gradlew clean` | — |
+
+**缺 SDK 诊断**：Android 项目在 `local.properties` 里没有 `sdk.dir` 时，
+扫描期就提示「Android SDK: 未配置，无法构建」，而不是等构建失败后
+让用户在一整页 Gradle 输出里找那一行 `SDK location not found`。
+
+### 6.5 npm
+
+| 档 | 做法 | 写盘 |
+|---|---|---|
+| 1 | `package.json` 的 `scripts` | 否 |
+
+**npm 是唯一完全不需要档 2 的构建器**：每个任务都是文件里已经写明的脚本，
+没什么可猜的，也没什么可问的。
+
+唯一值得读的是**锁文件决定包管理器**：
+
+| 锁文件 | 命令 |
+|---|---|
+| `pnpm-lock.yaml` | `pnpm` |
+| `yarn.lock` | `yarn` |
+| `bun.lockb` | `bun` |
+| `package-lock.json` 或无 | `npm` |
+
+理由：用 pnpm 装的目录，用 npm 跑脚本会解析到不同的模块。
+
+**生成规则**：每个 script 一条任务，`build`/`compile`/`bundle` 之一成为默认；
+`test`/`check`/`lint` 归 test 组。**没有脚本的项目不生成任务**——
+没东西可构建不是错误，不报 note。
+
+**边界**：`package.json` JSON 解析失败时，note 为 `broken`（「无法读取」），
+与 `unparsed`（「未完整列出」）区分开。
+
+### 6.6 Meson
 
 | 档 | 做法 | 写盘 |
 |---|---|---|
@@ -339,7 +455,7 @@ executable(c_name, sources, ...)
 
 扫描期绝不写磁盘；只有点 build 或点「精确内省」才 `meson setup`。
 
-### 6.4 Swift
+### 6.7 Swift
 
 | 档 | 做法 | 说明 |
 |---|---|---|
@@ -362,7 +478,7 @@ core-eq 静态解析已实测成功：`.executable(name: "CoreEQ"`。
 | clean | `swift package clean` |
 | run <product> | `swift run <name>` |
 
-### 6.5 Make
+### 6.8 Make
 
 | 档 | 做法 |
 |---|---|
@@ -384,7 +500,7 @@ core-eq 静态解析已实测成功：`.executable(name: "CoreEQ"`。
 - `test`/`*-test`/`check` → test 组
 - 其余（`format`/`lint`/`clean`/…）→ 无组
 
-### 6.6 Xcode
+### 6.9 Xcode
 
 只有档 2：`xcodebuild -list -json -project X.xcodeproj`。
 
@@ -401,22 +517,48 @@ core-eq 的 `Makefile:29` 就是 `xcodebuild ... build`，
 
 Xcode 是唯一需要 `*.xcodeproj` glob 的构建器，且只在「精确内省」时调用。
 
-### 6.7 多构建器优先级
+### 6.10 多构建器优先级
 
 决定「默认构建」给谁。高 → 低：
 
 1. `.mayoi/builders.json` 的 `prefer`
-2. **Make 的配方里调用了别的构建器**（`make -qp` 输出含 `xcodebuild`/`swift build`/`cargo`/`cmake`/`meson`）
-3. 有构建产物目录（`target/` `build/` `.build/` `dist/`）——**弱信号**：
-   glim 无 `target/`、g4music 无 `build/`、core-eq 只有 `.build/`，单凭它猜不准
-4. 固定次序：Cargo > CMake > Meson > Swift > Make > Xcode > Go > npm
-5. 同名任务去重，先到先得
+2. **某个 Makefile 的配方调用的构建系统本身也在场**时，该构建系统排第一、Makefile 排第二
+3. 固定次序：Cargo > CMake > Go > Gradle > Meson > npm > Swift > Make > Xcode
 
-`isDefault` 只在**最终排第一的那个 build 任务**上置位；其余 build 任务保留
+`isDefault` 只在**最终排第一的那个构建系统**上置位；其余保留
 `group: "build"` 但无 `isDefault`。
 
-core-eq 验证目标：`Package.swift` + `Makefile` + `CoreEQ.xcodeproj` 三者共存，
-`Makefile:29` 调 `xcodebuild` → **Make 排第一，默认构建是 Make 的 build**。
+### 为什么「被调用者」在前，而不是「调用者」在前
+
+一个只有 `swift build` 一行配方的 Makefile 是 **Swift 的一层壳**：
+它产出的任务是 Swift 的任务，人要看的也是 Swift 的 target。
+所以 Swift 排前，Makefile 排后。
+
+实测两个方向：
+
+| 项目 | Makefile 调用 | 排序 |
+|---|---|---|
+| `wrap-test`（自制 fixture） | `swift build` | **swift** → make |
+| `core-eq` | `xcodebuild` | **make** → swift |
+
+`core-eq` 之所以不变：它的 Makefile 调的是 `xcodebuild`，
+而 Xcode **没有**独立成组（本插件没读到 pbxproj），
+所以「被调用者不在场」这条规则不成立，make 仍是唯一入口。
+
+### 两条实测得出的细则
+
+1. **只有配方行算数**。core-eq 的 Makefile 第 6 行有注释
+   `# Extra build settings for xcodebuild`，早期实现用全文
+   `includes("xcodebuild")` 会把这行注释误判为调用证据。
+   现在只扫描以 tab 开头的行，并跳过配方内注释。
+2. **被调用者必须也在场**。只有 Makefile 调 `swift build`、
+   但没有 `Package.swift` 的项目，不会把一个不存在的 swift 组排到前面。
+
+### 已放弃的信号
+
+「有构建产物目录」曾作为强弱信号，实测不可靠：
+glim 无 `target/`、g4music 无 `build/`、core-eq 只有 `.build/`。
+单凭目录存在与否猜不出主力构建器，已移除。
 
 ---
 
@@ -432,6 +574,8 @@ core-eq 验证目标：`Package.swift` + `Makefile` + `CoreEQ.xcodeproj` 三者�
 | Make | 复用 GCC/Clang |
 | Meson | 复用 GCC/Clang |
 | CMake | 编译错误复用 GCC/Clang；配置错误不进面板（见 6.2） |
+| Gradle | 复用 GCC/Clang（AGP 的 javac 输出同形） |
+| npm | 复用 GCC/Clang（构建脚本转发的输出） |
 
 ---
 
@@ -440,27 +584,36 @@ core-eq 验证目标：`Package.swift` + `Makefile` + `CoreEQ.xcodeproj` 三者�
 沿用 tasks 的 `stack + tree + code`，改动只在分组：
 
 ```
-▾ Builders                          [刷新]
-  ▾ CMake · libhttp
-      build                  ✓       [执行]
-      build client
-      test
-  ▾ Meson · g4music
-      build g4music
+▾ Televe                gradle
+    build               默认
+    build all
+    build library
+    build app
+    test
+    clean
+▾ core-eq               make
+    build
+    format
 ─────────────────────────────────
-  build                      ✓ 0     [日志] [清除]
-  $ cmake --build build
+  build                  ✓        [日志] [清除]
+  $ ./gradlew assembleDebug
   …最后 200 行
 ```
 
 对齐 DESIGN.md 的 Stability：
 
-- 构建器节点 `open: true`，折叠状态由 view 自己保持
+- **组节点是项目**：label 用构建系统声明的项目名，没有则用文件夹名；
+  description 放构建系统类型（`gradle`、`make`）。同一个项目名不会重复三次。
+- **任务行只有名字**：description 除默认构建显示「默认」外为空；
+  实际命令挂在运行按钮的 tooltip（`执行: ./gradlew assembleDebug`）。
+  原因见 17：行本身不支持 tooltip，且行内 actions 只在悬停时显示。
+- 组节点 `open: true`，折叠状态由 view 自己保持
 - 行尾只放**一个**标记：`✓` / `✗ <code>` / `…`（运行中）。**时间不显示**（位数会变宽）
 - 行内 `actions` 只在悬停显示（`pluginviews.go:592`），且白名单无 `play`
-  —— 运行按钮用 `icon: "check"` 或文字按钮
-- `button` 节点忽略 icon、无 disabled（`pluginviews.go:423-434`），「精确内省」用文字按钮
-- 后台内省进行中：构建器节点 `description: "…"`，**不新增行**，避免行数跳动
+  —— 运行按钮用 `icon: "check"`
+- `button` 节点忽略 icon、无 disabled（`pluginviews.go:423-434`）
+- 构建器节点有 note 时（子模块未初始化、缺 SDK、旧 CMake 策略），
+  description 换成那条 note，优先于构建系统类型
 
 ---
 
@@ -553,6 +706,12 @@ core-eq 验证目标：`Package.swift` + `Makefile` + `CoreEQ.xcodeproj` 三者�
 | 5 | **Swift** | `core-eq` 列出 `build CoreEQ`（静态解析，无需 swift 可用） |
 | 6 | 优先级 | `core-eq` 默认构建选中 **Make 的 build** |
 | 7 | Xcode 档 2 + 配置 + README | `core-eq` 在 Make 之外有 xcode 方案；`builders.json` 的 `disable`/`prefer` 生效 |
+| 8 | **Go** | `Mayoi` 列出 `build mayoi`/`build icongen`；无 `go run .`；构建成功 |
+| 9 | **npm** | `glim/scripts/markdown` 只出 `build`（无 test/clean）；pnpm 锁文件时全部用 pnpm |
+| 10 | **Gradle** | `Televe` 列出 `build`/`build all`/`build library`/`build app`；默认是 `assembleDebug` 且能成功；缺 SDK 时提前提示 |
+| 11 | 多窗口 | 两个窗口各显示自己文件夹的任务 |
+
+**阶段 8–11 是超出原方案的追加**，见第十六章。
 
 每阶段用 `mayoi run builder.reload` 验证，不重启。
 
@@ -567,7 +726,12 @@ core-eq 验证目标：`Package.swift` + `Makefile` + `CoreEQ.xcodeproj` 三者�
 | Swift | `core-eq` | 1 个 executable product |
 | Meson | `g4music` | target 在子目录，变量来自 `meson.project_name()` |
 | **CMake** | **`libhttp`** | **多行 add_executable、空 submodule、过低 cmake_minimum_required、76→6 目标过滤** |
+| **Go** | `Mayoi`（516 个 go 文件，2 个 main 包） | 必须走 `ask`；包路径 vs 名字；`-v` 的输出 |
+| **npm** | `glim/scripts/markdown`（1 个脚本）、自制 pnpm fixture | 只生成存在的脚本；锁文件决定包管理器 |
+| **Gradle** | `Televe`（AGP 9.3.1，2 模块，Android） | **默认 `assembleDebug` 而非 `build`**、缺 SDK 诊断、wrapper 版本 |
 | 多构建器 | `core-eq` | Make + Swift + Xcode 共存，验证优先级 |
+| 优先级反例 | `wrap-test`（自制） | Makefile 调 `swift build` → swift 排前 |
+| 多窗口 | `Mayoi` + `core-eq` 两个窗口 | 各显示自己的任务 |
 
 ---
 
@@ -603,3 +767,69 @@ core-eq 验证目标：`Package.swift` + `Makefile` + `CoreEQ.xcodeproj` 三者�
 | 一次 `findFiles` 拿全 | 默认路径**零宽 glob** | `findFiles` 匹配在主线程，成本随索引线性增长 |
 | 按本机耗时决定同步/异步 | 调用次数、线程归属、数据规模 | 本机数字不可外推 |
 | 未提 CMake | 完整三档 + 目标过滤 + 可配置性诊断 | 用户要求，libhttp 实测 |
+| 未提 Go / npm / Gradle | 各有一节 | 用户要求，见第十六章 |
+
+---
+
+## 十六、实现之外的追加（原方案未提）
+
+以下四件事在方案定稿后才出现，都由实测或使用中发现，记录在此以便追溯。
+
+### 16.1 单个插件实例服务所有窗口
+
+**事实**（源码核实）：
+
+| 项 | 证据 |
+|---|---|
+| 插件整个应用只有一个实例 | `cmd/mayoi/plugins.go:154` 只建一次 `newPluginHost` |
+| `workspace.root()` 返回**最前面窗口**的文件夹 | `pluginapi.go:359` → `h.front()` |
+| 渲染的视图树是全局一份 | `pluginviews.go:138` `var pluginViews` |
+| `workspace.changed` **只在最前面窗口**换文件夹时触发 | `pluginevents.go:44-49` |
+
+**问题**：开第二个窗口不触发任何事件，面板继续显示第一个窗口的任务。
+
+**做法**：扫描结果记住读的是哪个文件夹，在**绘制前**与**选任务前**
+比对当前最前面窗口的文件夹，不同则重新扫描。
+
+`frontRoot()` 有 500ms 节流：绘制在构建期间每行触发一次，不能每次都问宿主。
+
+**验证**：两个窗口（`Mayoi` + `core-eq`）各显示自己的任务，用户确认通过。
+
+### 16.2 插件加载只有 2 秒
+
+`ActivateLimit = 2s`（`runtime.go:66,242`）约束的是**顶层代码 + activate**。
+
+最初在顶层直接 `scanFolder()`，而 Go 的扫描要跑 `go list`，
+超过 2 秒导致**整个插件加载失败并被关闭**——比面板空白严重得多。
+
+**做法**：`setTimeout(() => { void scanFolder(); }, 0)`，让顶层瞬间返回。
+
+### 16.3 静默成功的构建
+
+`go build` 成功时**完全不输出**，面板只剩一行命令，看起来像卡住。
+加 `-v` 后只在有包被编译时打印包名；全缓存命中时仍无输出。
+
+**做法**：任务结束且输出为空、退出码为 0 时，插件自己写一行
+「命令没有输出，已结束」。
+
+### 16.4 任务按「构建器 + label」作键
+
+每个构建系统都把自己的 build 叫 `build`，一个文件夹里有两个构建器时：
+`history`（运行结果）、`logs`（输出）、`running`（进行中）全部撞车，
+一个的 `✓` 会显示在另一个名下。
+
+**做法**：`taskKey(task) = builder + "·" + label`，所有按 label 索引的状态改用它。
+这是相对 `mayoi-tasks` 移植代码的唯一模型改动。
+
+---
+
+## 十七、已知限制
+
+| 限制 | 原因 | 影响 |
+|---|---|---|
+| **Maven 未实现** | 本机无 `mvn`，无 `pom.xml` 项目可验证 | 有 `pom.xml` 的文件夹不被识别 |
+| **CMake 配置错误不进问题面板** | 两行结构，逐行引擎表达不了 | 配置错误只在日志里，写进 README |
+| **用户自带 cargo 任务不带 `--message-format=short`** | 无法约束用户写的任务 | 两行格式的 rust 错误匹配不到 |
+| **`findFiles` 的成本随项目规模增长** | 匹配在宿主主线程 | 默认路径零宽 glob 规避；Xcode 是唯一例外 |
+| **行不支持 tooltip** | `viewItem` 无 `Tooltip` 字段 | 命令只能挂在运行按钮的 tooltip 上 |
+| **插件视图无标题栏按钮** | `pluginView` 分支只设标题 | 刷新按钮只能放在视图内部 |
