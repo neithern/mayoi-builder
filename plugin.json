@@ -22,6 +22,8 @@
     "workspaceContains:Cargo.toml",
     "workspaceContains:CMakeLists.txt",
     "workspaceContains:go.mod",
+    "workspaceContains:settings.gradle",
+    "workspaceContains:build.gradle",
     "workspaceContains:meson.build",
     "workspaceContains:package.json",
     "workspaceContains:Package.swift",

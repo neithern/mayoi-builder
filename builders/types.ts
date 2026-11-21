@@ -37,7 +37,7 @@ export interface Matcher {
 }
 
 // BuilderId is one build system this plugin knows.
-export type BuilderId = "cargo" | "cmake" | "go" | "meson" | "npm" | "swift" | "make" | "xcode";
+export type BuilderId = "cargo" | "cmake" | "go" | "gradle" | "meson" | "npm" | "swift" | "make" | "xcode";
 
 // Problem is a matcher of a build system's own, named for the messages it
 // reads. Every build system that compiles C, C++ or Swift says a problem
@@ -148,6 +148,9 @@ export interface Note {
     | "oldPolicy"
     // a build file this plugin could not read, as one that is not JSON.
     | "broken"
+    // a project that asks for a toolchain this folder does not name, as an
+    // Android project without an SDK.
+    | "missingSdk"
     // something a build file names that a scan did not follow.
     | "unparsed";
   // subject is what the note is about, as the folder of a submodule, the
@@ -187,6 +190,10 @@ export const markerFiles: string[] = [
   "Cargo.toml",
   "CMakeLists.txt",
   "go.mod",
+  "build.gradle",
+  "build.gradle.kts",
+  "settings.gradle",
+  "settings.gradle.kts",
   "meson.build",
   "package.json",
   "Package.swift",
