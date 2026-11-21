@@ -22,6 +22,7 @@ import cargo from "./cargo";
 import cmake from "./cmake";
 import go from "./go";
 import meson from "./meson";
+import npm from "./npm";
 import swift from "./swift";
 import make from "./make";
 import xcode from "./xcode";
@@ -29,7 +30,7 @@ import xcode from "./xcode";
 // builders are the build systems known, in the order the panel tries them
 // when nothing else says which one builds: the one that builds the most
 // projects first.
-const builders: Builder[] = [cargo, cmake, go, meson, swift, make, xcode];
+const builders: Builder[] = [cargo, cmake, go, meson, npm, swift, make, xcode];
 
 // Found is a build system a folder has.
 export interface Found {
@@ -288,6 +289,8 @@ export function noteText(note: Note): string {
       return note.subject + ": " + say("builder.initialised");
     case "oldPolicy":
       return note.subject + ": " + say("builder.oldPolicy");
+    case "broken":
+      return note.subject + ": " + say("builder.broken");
     case "unparsed":
       return note.subject + ": " + say("builder.truncated");
     default:

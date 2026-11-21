@@ -23,6 +23,7 @@
     "workspaceContains:CMakeLists.txt",
     "workspaceContains:go.mod",
     "workspaceContains:meson.build",
+    "workspaceContains:package.json",
     "workspaceContains:Package.swift",
     "workspaceContains:Makefile",
     "workspaceContains:GNUmakefile",

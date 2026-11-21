@@ -37,7 +37,7 @@ export interface Matcher {
 }
 
 // BuilderId is one build system this plugin knows.
-export type BuilderId = "cargo" | "cmake" | "go" | "meson" | "swift" | "make" | "xcode";
+export type BuilderId = "cargo" | "cmake" | "go" | "meson" | "npm" | "swift" | "make" | "xcode";
 
 // Problem is a matcher of a build system's own, named for the messages it
 // reads. Every build system that compiles C, C++ or Swift says a problem
@@ -112,6 +112,11 @@ export interface Rough {
   // is not something to show, since a person reading the tasks sees the
   // tasks. Empty when this one stands alone.
   wraps?: string;
+  // tool is the program this one's own tasks run through, when the folder
+  // has a choice of them: a package.json in a folder with a pnpm lockfile
+  // is a pnpm project, and npm would resolve other modules than the ones
+  // it was set up with. Empty when the build system names one program.
+  tool?: string;
 }
 
 // Target is one thing a build system can build.
@@ -134,11 +139,19 @@ export interface Target {
 
 // Note is something to tell before a build, about the project as it is.
 export interface Note {
-  // key names what the note is about, so that translations can word it:
-  // one of "initialised", "oldPolicy", "missingTool".
-  key: "initialised" | "oldPolicy" | "missingTool" | "unparsed";
+  // key names what the note is about, so that translations can word it.
+  key:
+    // a folder a build file adds, which is not there: a submodule not set up.
+    | "initialised"
+    // a project that asks for a version of its build system this one no
+    // longer takes.
+    | "oldPolicy"
+    // a build file this plugin could not read, as one that is not JSON.
+    | "broken"
+    // something a build file names that a scan did not follow.
+    | "unparsed";
   // subject is what the note is about, as the folder of a submodule, the
-  // version a project asks for, or the program that is not there.
+  // version a project asks for, or the file that could not be read.
   subject: string;
 }
 
@@ -175,6 +188,7 @@ export const markerFiles: string[] = [
   "CMakeLists.txt",
   "go.mod",
   "meson.build",
+  "package.json",
   "Package.swift",
   "GNUmakefile",
   "Makefile",
