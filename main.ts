@@ -113,11 +113,12 @@ function folderName(path: string): string {
 }
 
 // commandOf is what a task would run, as a person would type it: its
-// program and its arguments. A shell task names a whole line, which is its
-// command, and is cut since a tooltip holds a line and not a script.
+// program and its arguments. A shell task names a whole line, which is
+// its command, and the whole of it is what this answers.
 function commandOf(task: Task): string {
-  const line = [task.command, ...(task.args || [])].join(" ");
-  return line.length > 72 ? line.slice(0, 69) + "…" : line;
+  // The whole line, never cut: the panel shows it so that a person can
+  // copy it out, and a command with its end missing is worse than none.
+  return [task.command, ...(task.args || [])].join(" ");
 }
 
 // taskKey is what a task is kept by: its build system and its label.
@@ -345,6 +346,11 @@ function currentLog(): Log | null {
   return show ? logs.get(show) || null : null;
 }
 
+// taskAt is the task a key names, for the row a person clicked.
+function taskAt(key: string): Task | undefined {
+  return allTasks().find((task) => taskKey(task) === key);
+}
+
 // renderList draws the build systems of the folder, and the result of the
 // task chosen.
 //
@@ -477,6 +483,21 @@ async function renderListNow(): Promise<void> {
   });
 
   children.push({ type: "tree", items });
+
+  // The line of the task chosen, above what it printed: a row is too narrow
+  // for a command, and a command is what a person copies out of this panel.
+  // It shows whether or not the task has run, so that looking a command up
+  // is a click and no more.
+  const chosen = show ? taskAt(show) : undefined;
+  if (chosen) {
+    children.push({
+      type: "text",
+      text: chosen.label,
+      muted: true,
+      size: 11.5,
+    });
+    children.push({ type: "code", text: commandOf(chosen), language: "shell" });
+  }
 
   const shown = currentLog();
   if (shown) {
