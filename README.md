@@ -171,6 +171,10 @@ Optional, in the folder. Comments and trailing commas are allowed.
   Mayoi's plugin API has no clipboard, and the Copy Code button that a
   Markdown preview has is drawn by another renderer that a plugin's view
   does not use.
+- **The tab a full log opens in can be edited.** Mayoi's documents have no
+  read-only state. The plugin asks for the same tab each time and Mayoi
+  refuses to replace one that has unsaved edits, so a change made by hand
+  is never overwritten by the next run.
 
 ## One plugin, every window
 

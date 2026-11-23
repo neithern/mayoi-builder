@@ -568,11 +568,31 @@ async function openLog(): Promise<void> {
   // again writes into the tab it opened before, rather than a new one for
   // every run. Mayoi refuses to replace a tab a person has edited, which
   // is the right answer for a log they changed by hand.
-  await window.openText(l.full || l.body, {
-    title: l.label,
+  const opts: {
+    title: string;
+    language: string;
+    key: string;
+    beside?: { windowId: number; documentId: number };
+  } = {
+    title: l.label + " · " + say("builder.log"),
+    // A log is the build system's own words, and the highlighter that
+    // reads them reads nothing of it well: plain text is what it is.
     language: "text",
     key: show,
-  });
+  };
+  // Beside the file being worked on, when one is, as Mayoi's own output
+  // panels do: a build's log is read against the code it is about, and a
+  // tab of its own away from it loses that. A window with no editor open
+  // has nothing to stand beside, and the log opens as a tab instead.
+  //
+  // The reference is never null, and never zero: Mayoi numbers a window
+  // the first time it is asked for one, and every document has an id. An
+  // untitled document has one too, and a log may stand beside it.
+  const ed = await editor.active();
+  if (ed) {
+    opts.beside = ed.document.ref;
+  }
+  await window.openText(l.full || l.body, opts);
 }
 
 // clearLog takes the chosen task's log away, keeping what the task is and
