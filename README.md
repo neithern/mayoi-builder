@@ -42,6 +42,14 @@ once would put two task panels in the sidebar.
 A task's output opens in a tab of its own, with the command that ran it,
 and the problems in it go to **Show Problems**.
 
+Click a task to see the line it would run, above whatever it printed. The
+line is shown whether or not the task has run, so looking a command up is
+a click, and it is there to be selected and copied.
+
+The panel groups the tasks by project: a group is named for the name its
+build system declares, or for the folder when it declares none, and its
+description is the build system, as `make` or `gradle`.
+
 ## What it finds
 
 | Build system | Marker | Targets |
@@ -60,6 +68,12 @@ A folder may have several. When a Makefile's recipes run another build
 system that is here as well, that one comes first and the Makefile second:
 a Makefile holding one `swift build` line is a shell over Swift, and
 Swift is where the tasks are.
+
+Of a Makefile, every target it declares is a task, `install` among them,
+and only a target that builds is of the build group: `sign`, `install`
+and `release` are what happens to a build afterwards, and a Makefile of
+only those has no build to make the default. A row named **build** is the
+file's own `build` target and nothing else.
 
 ### Go
 
@@ -125,8 +139,8 @@ Optional, in the folder. Comments and trailing commas are allowed.
 
 - **No debugging.** There is no DAP client here: this plugin runs builds.
 - **No `dependsOn`.** A task runs alone.
-- **No terminal.** Mayoi's plugin API has no terminal, so output is a tab
-  and the problems are the panel.
+- **No terminal.** A task's output is a tab and the problems are the
+  panel; nothing is run in a terminal.
 
 ### Known limits
 
@@ -149,6 +163,13 @@ Optional, in the folder. Comments and trailing commas are allowed.
 - **An Android project without an SDK says so, and cannot build.**
   `local.properties` naming `sdk.dir` is what the panel looks for; the
   `ANDROID_HOME` variable is not visible to a plugin.
+- **The log cannot scroll on its own.** A view has one scroll for its
+  whole tree, and a `code` node has no height of its own, so a long log
+  and the task list share it: the panel keeps the last 200 lines.
+- **A task's command is selected and copied, not copied by a button.**
+  Mayoi's plugin API has no clipboard, and the Copy Code button that a
+  Markdown preview has is drawn by another renderer that a plugin's view
+  does not use.
 
 ## One plugin, every window
 

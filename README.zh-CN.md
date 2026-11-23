@@ -39,6 +39,13 @@ mayoi plugin install neithern/builder
 
 任务的输出在单独的标签页里打开，带上跑它的那条命令；输出里的问题进 **问题面板**。
 
+点一个任务，就能看到它实际要跑的那一行，显示在它输出内容的上方。
+无论这个任务有没有跑过都会显示，所以查一条命令只需点一下，
+而且这行文字可以直接选中复制。
+
+面板按项目分组：组名用构建系统自己声明的名字，没声明就用文件夹名；
+组的 description 是构建系统类型，比如 `make`、`gradle`。
+
 ## 能识别什么
 
 | 构建系统 | 标志文件 | target |
@@ -56,6 +63,11 @@ mayoi plugin install neithern/builder
 一个文件夹可以有多个。当某个 Makefile 的配方调用了**另一个也在场的**构建系统时，
 被调用的那个排前面，Makefile 排后面：只写了一行 `swift build` 的 Makefile
 是 Swift 的一层壳，任务在 Swift 那边。
+
+对一个 Makefile 来说，它声明的每个 target 都是一条任务，`install` 也不例外；
+但只有真正做构建的 target 才归入 build 组：`sign`、`install`、`release`
+是构建之后的事，只有这些而没有 `build` 的 Makefile，就没有默认构建可言。
+标着 **build** 的那一行，只可能是文件自己写的 `build` target。
 
 ### Go
 
@@ -114,7 +126,7 @@ Android 项目的**默认构建**是 `assembleDebug`，不是 `build`。`build` 
 
 - **不做调试。** 这里没有 DAP 客户端：这个插件只跑构建。
 - **不支持 `dependsOn`。** 一个任务单独跑。
-- **没有终端。** Mayoi 的插件 API 没有终端，所以输出是标签页，问题是面板。
+- **不走终端。** 任务的输出是标签页，问题是面板；任何东西都不在终端里跑。
 
 ### 已知限制
 
@@ -134,6 +146,10 @@ Android 项目的**默认构建**是 `assembleDebug`，不是 `build`。`build` 
   以及这一类模块都有的任务。
 - **没有 SDK 的 Android 项目会说，而且构建不了。** 面板找的是
   `local.properties` 里的 `sdk.dir`；`ANDROID_HOME` 环境变量对插件不可见。
+- **日志没法单独滚动。** 一个视图只有一个滚动区域包住整棵树，而 `code`
+  节点没有自己的高度，所以长日志和任务列表共用同一个滚动区：面板只保留最后 200 行。
+- **任务的命令靠选中复制，没有按钮。** Mayoi 的插件 API 没有剪贴板，
+  而 Markdown 预览里的「复制代码」按钮由另一套渲染器绘制，插件视图用不到它。
 
 ## 一个插件，所有窗口
 
