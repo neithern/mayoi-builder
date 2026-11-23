@@ -351,25 +351,6 @@ function taskAt(key: string): Task | undefined {
   return allTasks().find((task) => taskKey(task) === key);
 }
 
-// commandBlock is a task's line as Markdown: its name as a heading, and
-// the line in a fenced block of the shell's language, so that Mayoi draws
-// it in the writing font, on the tint of a code block, selectable.
-//
-// The name is what tells two rows of one build system apart, since both
-// say "build", and the block is what a person copies.
-//
-// The name is escaped, since a script's name is what the folder wrote and
-// may hold a character Markdown reads: an npm script "a_b" would turn the
-// rest of its heading italic.
-function commandBlock(task: Task): string {
-  // Backslashes first, so that the escapes added after them stay escapes.
-  const heading = task.label
-    .replace(/\\/g, "\\\\")
-    .replace(/([*_`\[\]<>|#])/g, "\\$1")
-    .replace(/\n/g, " ");
-  return "### " + heading + "\n\n```sh\n" + commandOf(task) + "\n```";
-}
-
 // renderList draws the build systems of the folder, and the result of the
 // task chosen.
 //
@@ -507,15 +488,15 @@ async function renderListNow(): Promise<void> {
   // for a command, and a command is what a person copies out of this panel.
   // It shows whether or not the task has run, so that looking a command up
   // is a click and no more.
-  //
-  // It is Markdown, and only it: a heading that says which task the line
-  // belongs to, then the line in a code block, which Mayoi draws in the
-  // writing font on the tint a block of code has. The log below stays a
-  // code node, since a build's output is not Markdown and a line of it
-  // that begins with ">" or "*" would be read as a quote or a list.
   const chosen = show ? taskAt(show) : undefined;
   if (chosen) {
-    children.push({ type: "markdown", text: commandBlock(chosen) });
+    children.push({
+      type: "text",
+      text: chosen.label,
+      muted: true,
+      size: 11.5,
+    });
+    children.push({ type: "code", text: commandOf(chosen), language: "shell" });
   }
 
   const shown = currentLog();
