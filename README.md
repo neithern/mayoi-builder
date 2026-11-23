@@ -165,7 +165,8 @@ Optional, in the folder. Comments and trailing commas are allowed.
   `ANDROID_HOME` variable is not visible to a plugin.
 - **The log cannot scroll on its own.** A view has one scroll for its
   whole tree, and a `code` node has no height of its own, so a long log
-  and the task list share it: the panel keeps the last 200 lines.
+  and the task list share it: the panel keeps the last 15 lines, and
+  **Full Log** opens the rest.
 - **A task's command is selected and copied, not copied by a button.**
   Mayoi's plugin API has no clipboard, and the Copy Code button that a
   Markdown preview has is drawn by another renderer that a plugin's view

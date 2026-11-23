@@ -66,6 +66,17 @@ const logs = new Map<string, Log>();
 // show is the task whose log the view shows, "" for none.
 let show = "";
 
+// commandOpen is whether the chosen task's line is shown above its log. A
+// person who has read it can put it away, and the row of the task brings
+// it back: it is a panel of its own, not a part of the log.
+let commandOpen = true;
+
+// logLines is how much of a task's log the panel shows, its end: a
+// build's failure is at the end, and the tasks above it keep their room.
+// It is declared here, above the first draw, since a const read before
+// its line is a ReferenceError, which would fail the plugin's load.
+const logLines = 15;
+
 // ranPaths are the files the run before found problems in.
 // ported from mayoi-tasks
 let ranPaths: string[] = [];
@@ -459,10 +470,16 @@ async function renderListNow(): Promise<void> {
         description: detail,
         onClick: () => {
           show = key;
+          // A row chosen again is a person asking for that task, so the
+          // line it runs is shown again, even if it was put away.
+          commandOpen = true;
           void renderList();
         },
         actions: [{
-          icon: "check",
+          // send, and not a check or a terminal: a row runs the task, so
+          // a check would say it is already done, and a terminal would
+          // say it opens one, which it does not.
+          icon: "send",
           tooltip: say("builder.runOne") + ": " + commandOf(task),
           onClick: () => { void runAndShow(task); },
         }],
@@ -489,12 +506,21 @@ async function renderListNow(): Promise<void> {
   // It shows whether or not the task has run, so that looking a command up
   // is a click and no more.
   const chosen = show ? taskAt(show) : undefined;
-  if (chosen) {
+  if (chosen && commandOpen) {
+    // A row, as the log's is, and the word after the name: the same name
+    // heads both, so the two are told apart by what they hold. The cross
+    // puts it away, which the task's own row undoes by choosing it again.
     children.push({
-      type: "text",
-      text: chosen.label,
-      muted: true,
-      size: 11.5,
+      type: "list",
+      items: [{
+        key: "head-command",
+        label: chosen.label + " · " + say("builder.commandLine"),
+        actions: [{
+          icon: "x",
+          tooltip: say("builder.closeCommand"),
+          onClick: () => { closeCommand(); },
+        }],
+      }],
     });
     children.push({ type: "code", text: commandOf(chosen), language: "shell" });
   }
@@ -506,7 +532,9 @@ async function renderListNow(): Promise<void> {
       type: "list",
       items: [{
         key: "head-output",
-        label: shown.label,
+        // The word comes first and the result after it, so that a row of
+        // two runs of one task keeps its width as the mark changes.
+        label: shown.label + " · " + say("builder.log"),
         description: shown.running ? say("builder.runningMark") : shown.code === 0 ? "✓" : "✗ " + shown.code,
         actions: [
           { icon: "search", tooltip: say("builder.openLog"), onClick: () => { void openLog(); } },
@@ -514,9 +542,20 @@ async function renderListNow(): Promise<void> {
         ],
       }],
     });
-    children.push({ type: "code", text: lines.slice(-200).join("\n") });
+    // A handful of lines, not the whole log. The panel shares one scroll
+    // with the tasks, and a log of two hundred lines pushes them off it:
+    // what a build's end says is in its last lines, and the whole is a
+    // click away, in **Full Log**.
+    children.push({ type: "code", text: lines.slice(-logLines).join("\n") });
   }
   await views.render("builder.list", { type: "stack", gap: 6, children });
+}
+
+// closeCommand puts the chosen task's line away. Choosing a task again
+// brings it back, which is what the onClick of its row does.
+function closeCommand(): void {
+  commandOpen = false;
+  void renderList();
 }
 
 // openLog shows the whole log of the last run in a tab, which the panel
@@ -525,7 +564,15 @@ async function renderListNow(): Promise<void> {
 async function openLog(): Promise<void> {
   const l = currentLog();
   if (!l) return;
-  await window.openText(l.full || l.body, { title: l.label, language: "text" });
+  // The task's key is what the tab is kept by, so asking for a task's log
+  // again writes into the tab it opened before, rather than a new one for
+  // every run. Mayoi refuses to replace a tab a person has edited, which
+  // is the right answer for a log they changed by hand.
+  await window.openText(l.full || l.body, {
+    title: l.label,
+    language: "text",
+    key: show,
+  });
 }
 
 // clearLog takes the chosen task's log away, keeping what the task is and
