@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "description": "The build tasks of a folder's build system, found from what the project already declares",
   "author": "Nanling",
-  "repository": "https://github.com/neithern/builder",
+  "repository": "https://github.com/neithern/mayoi-builder",
   "license": "MIT",
   "keywords": [
     "build",

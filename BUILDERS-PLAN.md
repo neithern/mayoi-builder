@@ -139,7 +139,7 @@ case "code":
 
 ## 四、目录结构
 
-插件名 `builder`（已核实与 Mayoi 内置 8 个插件不冲突），仓库 `neithern/builder`。
+插件名 `builder`（已核实与 Mayoi 内置 8 个插件不冲突），仓库 `neithern/mayoi-builder`。
 
 ```
 mayoi-builder/

@@ -13,7 +13,7 @@ products, a Makefile's recipes, an Xcode project's schemes.
 ## Install
 
 ```sh
-mayoi plugin install neithern/builder
+mayoi plugin install neithern/mayoi-builder
 ```
 
 Or copy this folder into `~/.mayoi/plugins/builder`, or point Mayoi at it

@@ -12,7 +12,7 @@ Xcode 工程的 scheme。
 ## 安装
 
 ```sh
-mayoi plugin install neithern/builder
+mayoi plugin install neithern/mayoi-builder
 ```
 
 也可以把这个文件夹复制到 `~/.mayoi/plugins/builder`，或者用
