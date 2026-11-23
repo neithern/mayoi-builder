@@ -14,12 +14,19 @@
 import { workspace } from "mayoi";
 import { matcher, type Builder, type Rough, type Target, type Task } from "./types";
 
-// skipTargets are the names a Makefile has that are not a person's work:
-// the file itself, and the ones every Makefile has.
+// skipTargets are the names a Makefile has that are not a person's work.
+//
+// The file itself, and the targets CMake's own Makefiles carry, which no
+// hand-written one does: a build directory's install is "cmake --install",
+// which the CMake build system offers, and its two caches are CMake's own.
+//
+// A target as common as "install" is not here. A hand-written Makefile
+// with "install:" in it means it — CoreEQ's copies its app to
+// /Applications — and leaving one out is worse than listing a target
+// that only rebuilds what is there.
 const skipTargets = new Set([
   "Makefile", "makefile", "GNUmakefile",
-  "all", "default", "depend", "install", "install/local", "install/strip",
-  "list_install_components", "edit_cache", "rebuild_cache", "help",
+  "list_install_components", "edit_cache", "rebuild_cache",
 ]);
 
 const builder: Builder = {
@@ -126,17 +133,19 @@ function wrapped(text: string): string {
 function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
   const out: Task[] = [];
   const wraps = wrapsOf(rough);
+  // A row named build is the file's own "build" target, and nothing else.
+  // Naming the first target build, as this did, says a Makefile whose
+  // first target is "check" has a build it has not got: a person who runs
+  // it builds what they did not ask for, and cannot find "check" at all.
   const names = targets.map((t) => t.name);
-  // The build is the target called build, else the first the file has.
-  const build = names.includes("build") ? "build" : names[0];
-  if (build) {
+  if (names.includes("build")) {
     out.push({
       label: "build",
       type: "process",
       command: "make",
-      args: [build],
+      args: ["build"],
       group: { kind: "build", isDefault },
-      detail: wraps ? "make → " + wraps : "make · " + build,
+      detail: wraps ? "make → " + wraps : "make · build",
       builder: "make",
       problemMatcher: matcher("compilers"),
     });
@@ -144,10 +153,15 @@ function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
   for (const target of targets) {
     // The target Build runs is the row named build, and one of its own
     // would say the same thing twice.
-    if (target.name === build || target.name === "clean") continue;
+    if (target.name === "build" || target.name === "clean") continue;
+    // Only a target that builds is of the build group. Installing,
+    // signing and releasing are what happens to a build afterwards, and a
+    // Makefile of them and nothing else has no build to make the default:
+    // marking one as that would run "sh ./install.sh" at a person who
+    // asked to build.
     const group = /^(test|check)$|-(test|check)$/.test(target.name)
       ? "test"
-      : /^(build|sign|install|release|dist)$/.test(target.name)
+      : /^(build|dist)$/.test(target.name)
         ? "build"
         : undefined;
     out.push({
