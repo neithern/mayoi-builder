@@ -21,6 +21,7 @@ interface Ran {
   code: number;
   seconds: number;
   problems: number;
+  stopped?: boolean;
   at: number;
 }
 
@@ -31,6 +32,10 @@ interface Log {
   full: string;
   running: boolean;
   code: number;
+  stopped?: boolean;
+  seconds?: number;
+  problems?: number;
+  errors?: string[];
 }
 
 // A scan of the folder, kept until the folder or its build files change:
@@ -59,6 +64,9 @@ let history: { [label: string]: Ran } = {};
 
 // running are the labels of the tasks going now, which the list marks.
 const running = new Set<string>();
+
+// activeRuns maps each running task key to its stop callback.
+const activeRuns = new Map<string, () => Promise<void>>();
 
 // logs is what each task printed the last time it ran, by its label.
 const logs = new Map<string, Log>();
@@ -105,6 +113,27 @@ function tmpDir(kind: string): string {
 function shellQuote(s: string): string {
   if (/^[A-Za-z0-9_\-.,:/=@%+]+$/.test(s)) return s;
   return "'" + s.replace(/'/g, "'\\''") + "'";
+}
+
+// stripAnsi removes terminal color and control sequences from build output
+// so the panel, full log tab, and problem matchers see clean plain text.
+function stripAnsi(text: string): string {
+  return text
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "");
+}
+
+// formatDuration formats an elapsed time in milliseconds concisely for the
+// sidebar (e.g. "0.4s", "4.2s", "1m12s").
+function formatDuration(ms: number): string {
+  if (!ms || ms < 0) return "";
+  const s = ms / 1000;
+  if (s < 60) return Math.max(0.1, s).toFixed(1) + "s";
+  const m = Math.floor(s / 60);
+  const rem = Math.round(s % 60);
+  return rem ? m + "m" + rem + "s" : m + "m";
 }
 
 // groupKind is the kind of a task's group, as "build" or "test", and
@@ -236,12 +265,14 @@ function problemFrom(m: Matcher, line: string) {
 // diagnose writes the problems a run found, and clears those of the run
 // before, which a clean build ends.
 // ported from mayoi-tasks
-async function diagnose(task: Task, output: string, before: string[]): Promise<{ paths: string[]; total: number }> {
+async function diagnose(task: Task, output: string, before: string[]): Promise<{ paths: string[]; total: number; errors: string[] }> {
   const matchers = !task.problemMatcher
     ? []
     : Array.isArray(task.problemMatcher) ? task.problemMatcher : [task.problemMatcher];
   const root = (await workspace.root()) || "";
   const found: { [path: string]: Diagnostic[] } = {};
+  const errors: string[] = [];
+  const seenErrors = new Set<string>();
   for (const line of output.split("\n")) {
     for (const m of matchers) {
       const p = problemFrom(m, line);
@@ -253,6 +284,13 @@ async function diagnose(task: Task, output: string, before: string[]): Promise<{
         message: p.message,
         code: p.code,
       });
+      if (p.severity === "error") {
+        const trimmed = line.trim();
+        if (trimmed && !seenErrors.has(trimmed)) {
+          seenErrors.add(trimmed);
+          errors.push(trimmed);
+        }
+      }
       break; // one line, one problem
     }
   }
@@ -264,7 +302,7 @@ async function diagnose(task: Task, output: string, before: string[]): Promise<{
     total += found[path].length;
     await languages.setDiagnostics(path, found[path], { source: task.label });
   }
-  return { paths: Object.keys(found), total };
+  return { paths: Object.keys(found), total, errors };
 }
 
 // scanFolder finds the build systems of the folder and reads their tasks.
@@ -453,8 +491,20 @@ async function renderListNow(): Promise<void> {
       const was = history[key];
       const isRunning = running.has(key);
       let mark = "";
-      if (isRunning) mark = say("builder.runningMark");
-      else if (was) mark = was.code === 0 ? "✓" : "✗";
+      if (isRunning) {
+        mark = say("builder.runningMark");
+      } else if (was) {
+        const dur = formatDuration(was.seconds);
+        if (was.stopped) {
+          mark = say("builder.stopped");
+        } else if (was.code === 0) {
+          mark = dur ? "✓ " + dur : "✓";
+        } else {
+          const parts = [dur ? "✗ " + dur : "✗"];
+          if (was.problems) parts.push(was.problems + " " + say("builder.problems"));
+          mark = parts.join(" · ");
+        }
+      }
       // A row says its task's name, and how its last run went. Which build
       // system it is of, its group says; what it would run, the log of a
       // run says, and the tooltip of its button names the command, since a
@@ -475,14 +525,20 @@ async function renderListNow(): Promise<void> {
           commandOpen = true;
           void renderList();
         },
-        actions: [{
-          // send, and not a check or a terminal: a row runs the task, so
-          // a check would say it is already done, and a terminal would
-          // say it opens one, which it does not.
-          icon: "send",
-          tooltip: say("builder.runOne") + ": " + commandOf(task),
-          onClick: () => { void runAndShow(task); },
-        }],
+        actions: isRunning
+          ? [{
+            icon: "x",
+            tooltip: say("builder.stop") + ": " + task.label,
+            onClick: () => { void stopTask(key); },
+          }]
+          : [{
+            // send, and not a check or a terminal: a row runs the task, so
+            // a check would say it is already done, and a terminal would
+            // say it opens one, which it does not.
+            icon: "send",
+            tooltip: say("builder.runOne") + ": " + commandOf(task),
+            onClick: () => { void runAndShow(task); },
+          }],
       };
     });
     return {
@@ -528,6 +584,28 @@ async function renderListNow(): Promise<void> {
   const shown = currentLog();
   if (shown) {
     const lines = shown.body.split("\n");
+    const dur = shown.seconds ? formatDuration(shown.seconds) : "";
+    let status = "";
+    if (shown.running) {
+      status = say("builder.runningMark");
+    } else if (shown.stopped) {
+      status = dur ? say("builder.stopped") + " · " + dur : say("builder.stopped");
+    } else if (shown.code === 0) {
+      status = dur ? "✓ " + dur : "✓";
+    } else {
+      const parts = ["✗ " + shown.code];
+      if (dur) parts.push(dur);
+      if (shown.problems) parts.push(shown.problems + " " + say("builder.problems"));
+      status = parts.join(" · ");
+    }
+    const logActions = [];
+    if (shown.running) {
+      logActions.push({ icon: "x", tooltip: say("builder.stop"), onClick: () => { void stopTask(show); } });
+    }
+    logActions.push(
+      { icon: "search", tooltip: say("builder.openLog"), onClick: () => { void openLog(); } },
+      { icon: "trash", tooltip: say("builder.clearLog"), onClick: () => { clearLog(); } },
+    );
     children.push({
       type: "list",
       items: [{
@@ -535,18 +613,18 @@ async function renderListNow(): Promise<void> {
         // The word comes first and the result after it, so that a row of
         // two runs of one task keeps its width as the mark changes.
         label: shown.label + " · " + say("builder.log"),
-        description: shown.running ? say("builder.runningMark") : shown.code === 0 ? "✓" : "✗ " + shown.code,
-        actions: [
-          { icon: "search", tooltip: say("builder.openLog"), onClick: () => { void openLog(); } },
-          { icon: "trash", tooltip: say("builder.clearLog"), onClick: () => { clearLog(); } },
-        ],
+        description: status,
+        actions: logActions,
       }],
     });
-    // A handful of lines, not the whole log. The panel shares one scroll
-    // with the tasks, and a log of two hundred lines pushes them off it:
-    // what a build's end says is in its last lines, and the whole is a
-    // click away, in **Full Log**.
-    children.push({ type: "code", text: lines.slice(-logLines).join("\n") });
+    // When a build fails with matched compiler/project errors (common with
+    // verbose tools like xcodebuild and gradle whose trailing lines are only
+    // summary footers), surface the matched error lines directly in the panel.
+    const preview =
+      !shown.running && !shown.stopped && shown.code !== 0 && shown.errors && shown.errors.length
+        ? shown.errors.slice(0, logLines).join("\n")
+        : lines.slice(-logLines).join("\n");
+    children.push({ type: "code", text: preview });
   }
   await views.render("builder.list", { type: "stack", gap: 6, children });
 }
@@ -609,15 +687,30 @@ function clearLog(): void {
 // runAndShow runs a task, and draws the list anew as it begins and ends.
 // ported from mayoi-tasks
 async function runAndShow(task: Task): Promise<void> {
-  show = taskKey(task);
-  running.add(taskKey(task));
+  const key = taskKey(task);
+  if (running.has(key)) {
+    show = key;
+    await renderList();
+    await window.notify("Builders: " + task.label + " " + say("builder.alreadyRunning"));
+    return;
+  }
+  show = key;
+  running.add(key);
   await renderList();
   try {
     await runTask(task);
   } finally {
-    running.delete(taskKey(task));
+    running.delete(key);
+    activeRuns.delete(key);
     await renderList();
   }
+}
+
+// stopTask terminates a running task's process group.
+async function stopTask(key: string): Promise<void> {
+  const stop = activeRuns.get(key);
+  if (!stop) return;
+  await stop();
 }
 
 // runTask runs a task behind the bar's word for it, as a debug session
@@ -656,19 +749,26 @@ async function startLive(task: Task, command: string, argv: string[], cwd: strin
   done: Promise<number>;
   append: (text: string) => void;
   text: () => string;
-  finish: (code: number) => Promise<void>;
+  stop: () => Promise<void>;
+  wasStopped: () => boolean;
+  finish: (code: number, meta?: { seconds?: number; problems?: number; errors?: string[] }) => Promise<void>;
 }> {
   const stamp = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const dir = tmpDir("builders");
   const log = dir + "/" + task.label.replace(/[^\w.-]+/g, "-") + "-" + stamp + ".log";
   const codeFile = log + ".code";
+  const pidFile = log + ".pid";
   let shown = head;
   let stopped = false;
+  let userStopped = false;
 
+  // Run the task inside a monitor-mode subshell (set -m) so it owns its own
+  // process group (PGID == pid), allowing stop() to terminate the whole tree.
+  const inner =
+    "set -m; { " + command + " " + argv.map(shellQuote).join(" ") + " ; } > " + shellQuote(log) + " 2>&1 < /dev/null & " +
+    "pid=$!; echo $pid > " + shellQuote(pidFile) + "; wait $pid; echo $? > " + shellQuote(codeFile);
   const line =
-    "mkdir -p " + shellQuote(dir) + " && " +
-    "{ " + command + " " + argv.map(shellQuote).join(" ") + " ; echo $? > " + shellQuote(codeFile) +
-    " ; } > " + shellQuote(log) + " 2>&1 < /dev/null & echo started";
+    "mkdir -p " + shellQuote(dir) + " && sh -c " + shellQuote(inner) + " < /dev/null > /dev/null 2>&1 & echo started";
   await process.run("sh", ["-c", line], { cwd });
 
   const run = logs.get(taskKey(task)) as Log;
@@ -687,6 +787,7 @@ async function startLive(task: Task, command: string, argv: string[], cwd: strin
     } catch {
       return; // not written yet
     }
+    text = stripAnsi(text);
     if (text.length > streamCap) {
       const cut = text.slice(text.length - streamCap);
       const at = cut.indexOf("\n");
@@ -706,13 +807,39 @@ async function startLive(task: Task, command: string, argv: string[], cwd: strin
   };
   timer = setTimeout(tick, 60);
 
+  const stop = async () => {
+    if (stopped || userStopped) return;
+    userStopped = true;
+    let pid = "";
+    try {
+      pid = (await workspace.readFile(pidFile)).trim();
+    } catch {
+      // pid file may not exist yet or process already ended
+    }
+    if (/^\d+$/.test(pid)) {
+      const killLine =
+        "kill -TERM -" + pid + " 2>/dev/null; kill -TERM " + pid + " 2>/dev/null; " +
+        "sleep 0.2; kill -KILL -" + pid + " 2>/dev/null; kill -KILL " + pid + " 2>/dev/null; true";
+      try {
+        await process.run("sh", ["-c", killLine], { cwd, timeout: 5000 });
+      } catch {
+        // nothing else to do
+      }
+    }
+  };
+
   const done = (async () => {
+    let stopTicks = 0;
     for (;;) {
       await new Promise((r) => setTimeout(r, 120));
       let code: string;
       try {
         code = (await workspace.readFile(codeFile)).trim();
       } catch {
+        if (userStopped && ++stopTicks > 25) {
+          await readLog();
+          return 130;
+        }
         continue;
       }
       if (code === "") continue;
@@ -731,16 +858,25 @@ async function startLive(task: Task, command: string, argv: string[], cwd: strin
       void write();
     },
     text: () => shown.slice(head.length),
-    finish: async (code: number) => {
+    stop,
+    wasStopped: () => userStopped,
+    finish: async (code: number, meta?: { seconds?: number; problems?: number; errors?: string[] }) => {
       stopped = true;
       if (timer) clearTimeout(timer);
       await readLog();
-      await write();
+      run.body = shown.slice(head.length);
+      run.full = shown;
       run.running = false;
       run.code = code;
+      run.stopped = userStopped;
+      if (meta) {
+        run.seconds = meta.seconds;
+        run.problems = meta.problems;
+        run.errors = meta.errors;
+      }
       await renderList();
       try {
-        await process.run("sh", ["-c", "rm -f " + shellQuote(log) + " " + shellQuote(codeFile)], { cwd });
+        await process.run("sh", ["-c", "rm -f " + shellQuote(log) + " " + shellQuote(codeFile) + " " + shellQuote(pidFile)], { cwd });
       } catch {
         // nothing to do
       }
@@ -811,28 +947,34 @@ async function runTaskNow(task: Task): Promise<boolean> {
     await renderList();
     return false;
   }
+  activeRuns.set(key, live.stop);
   let code = -1;
   try {
     code = await live.done;
   } catch (e) {
     code = -1;
     live.append(String(e));
+  } finally {
+    activeRuns.delete(key);
   }
   const out = live.text();
+  const userStopped = live.wasStopped();
   // A program that prints nothing is not one that did nothing, and a log
   // that holds only the command looks like a run that never started. What
   // it left behind is the answer a person came for: a build that says
   // nothing has built, and one that failed says why in its own words.
-  if (!out.trim() && code === 0) {
+  if (userStopped) {
+    live.append("\n[" + say("builder.stopped") + "]\n");
+  } else if (!out.trim() && code === 0) {
     live.append(say("builder.quiet") + "\n");
   }
-  await live.finish(code);
   const elapsed = Date.now() - began;
   const problems = await diagnose(task, out, ranPaths);
   ranPaths = problems.paths;
-  history[taskKey(task)] = { code, seconds: elapsed, problems: problems.total, at: Date.now() };
-  last = taskKey(task);
-  return code === 0;
+  await live.finish(code, { seconds: elapsed, problems: problems.total, errors: problems.errors });
+  history[key] = { code, seconds: elapsed, problems: problems.total, stopped: userStopped, at: Date.now() };
+  last = key;
+  return !userStopped && code === 0;
 }
 
 // allTasks are the tasks of the folder, the default build first.
@@ -896,12 +1038,12 @@ function buildKey(kind: string): string {
 commands.register("builder.run", async () => {
   await views.reveal("builder.list");
   const task = await pickTask();
-  if (task) await runTask(task);
+  if (task) await runAndShow(task);
 });
 
 commands.register("builder.build", async () => {
   if (!(await ensureScanned())) {
-    await window.notify("Builders: " + say("builder.noTasks"));
+    await window.notify("Builders: " + say("builder.noBuilders"));
     return;
   }
   const task = await byGroup("build");
@@ -910,7 +1052,45 @@ commands.register("builder.build", async () => {
     return;
   }
   await views.reveal("builder.list");
-  await runTask(task);
+  await runAndShow(task);
+});
+
+commands.register("builder.test", async () => {
+  if (!(await ensureScanned())) {
+    await window.notify("Builders: " + say("builder.noBuilders"));
+    return;
+  }
+  const task = await byGroup("test");
+  if (!task) {
+    await window.notify("Builders: " + say("builder.noTest"));
+    return;
+  }
+  await views.reveal("builder.list");
+  await runAndShow(task);
+});
+
+commands.register("builder.stop", async () => {
+  const keys = Array.from(activeRuns.keys());
+  if (!keys.length) {
+    await window.notify("Builders: " + say("builder.noRunning"));
+    return;
+  }
+  if (show && activeRuns.has(show)) {
+    await stopTask(show);
+    return;
+  }
+  if (keys.length === 1) {
+    await stopTask(keys[0]);
+    return;
+  }
+  const chose = await window.pick(
+    keys.map((k) => {
+      const task = taskAt(k);
+      return { label: task ? (task.builder ? task.builder + " · " + task.label : task.label) : k, description: k };
+    }),
+    { placeholder: say("builder.stop") },
+  );
+  if (chose && chose.description) await stopTask(chose.description);
 });
 
 commands.register("builder.rerunLast", async () => {
@@ -926,7 +1106,8 @@ commands.register("builder.rerunLast", async () => {
     await window.notify("Builders: " + key);
     return;
   }
-  await runTask(task);
+  await views.reveal("builder.list");
+  await runAndShow(task);
 });
 
 commands.register("builder.reload", async () => {
@@ -961,10 +1142,10 @@ commands.register("builder.inspect", async () => {
   await window.progress(say("builder.inspecting") + " " + chose.label, async () => {
     try {
       const root = scanned!.root;
-      const targets = await ask(root, entry.rough);
+      const targets = await ask(root, entry.rough, scanned!.config);
       if (targets && targets.length) {
         entry.rough.targets = targets;
-        entry.tasks = entry.builder.tasks(entry.rough, targets, entry.isDefault);
+        entry.tasks = entry.builder.tasks(entry.rough, targets, entry.isDefault, scanned!.config);
         findings = scanned!.found;
       }
     } catch (e) {
@@ -992,10 +1173,11 @@ views.onShow("builder.list", async () => {
 
 // A build file saved reads the build systems again: the list follows the
 // file.
+const watchFiles = [...builders.markers(), "project.pbxproj", "contents.xcworkspacedata", "builders.json"];
 events.on("editor.didSave", (e: any) => {
   const path = e?.path || "";
   if (!path) return;
-  for (const marker of ["Cargo.toml", "CMakeLists.txt", "meson.build", "Package.swift", "GNUmakefile", "Makefile", "makefile", "project.pbxproj", "contents.xcworkspacedata", "builders.json"]) {
+  for (const marker of watchFiles) {
     if (path.endsWith("/" + marker)) {
       scanned = null;
       void scanFolder();

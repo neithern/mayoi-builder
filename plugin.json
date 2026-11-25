@@ -36,6 +36,8 @@
     "workspaceContains:*/*.xcworkspace/contents.xcworkspacedata",
     "onCommand:builder.run",
     "onCommand:builder.build",
+    "onCommand:builder.test",
+    "onCommand:builder.stop",
     "onCommand:builder.rerunLast",
     "onCommand:builder.reload",
     "onView:builder.list"
@@ -47,6 +49,18 @@
         "title": "Default Build",
         "title:zh-Hans": "默认构建",
         "title:ja": "既定のビルド"
+      },
+      {
+        "id": "builder.test",
+        "title": "Default Test",
+        "title:zh-Hans": "默认测试",
+        "title:ja": "既定のテスト"
+      },
+      {
+        "id": "builder.stop",
+        "title": "Stop Running Task",
+        "title:zh-Hans": "停止正在运行的任务",
+        "title:ja": "実行中のタスクを停止"
       },
       {
         "id": "builder.run",
@@ -83,6 +97,12 @@
       "plugins": [
         {
           "command": "builder.build"
+        },
+        {
+          "command": "builder.test"
+        },
+        {
+          "command": "builder.stop"
         },
         {
           "command": "builder.run"
