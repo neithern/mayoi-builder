@@ -225,15 +225,10 @@ export async function scan(
   return { root, found, notes, config };
 }
 
-// order puts the build system that builds the folder first: the one the
-// settings name, then one a recipe runs, then a recipe that runs one, then
-// the order of the list.
-//
-// The middle rule is what a project of several build systems needs. A
-// Makefile that runs swift build is a shell over Swift: the tasks that
-// come of it are Swift's, so Swift is what a person is looking at, and
-// the Makefile is the way it is run. So the build system a recipe names
-// comes first, and the recipe second.
+// order puts the build system that builds the folder first: a Makefile
+// takes the first group when present (with any underlying build systems
+// listed as the second group), else the build system a recipe wraps, then
+// the order of the list. .mayoi/builders.json's prefer always wins.
 function order(found: Found[], config: Config): void {
   const named = recipeRuns(found);
   found.sort((a, b) => {
@@ -247,9 +242,8 @@ function order(found: Found[], config: Config): void {
   }
 }
 
-// recipeRuns is the build system a Makefile's recipes run, when that build
-// system is here as well: a Makefile that runs swift build in a folder of
-// only a Makefile is just a Makefile.
+// recipeRuns is the build system a recipe runner calls, when that build
+// system is here as well.
 function recipeRuns(found: Found[]): string {
   for (const entry of found) {
     const wraps = entry.rough.wraps;
@@ -258,12 +252,14 @@ function recipeRuns(found: Found[]): string {
   return "";
 }
 
-// rank is how much a build system is the folder's build: 0 for the one a
-// recipe runs, 1 for a recipe that runs one, 2 for the rest.
+// rank puts Makefile first when present so other detected build systems
+// appear as the second group; otherwise a wrapped build system ranks ahead
+// of its wrapper.
 function rank(found: Found, named: string): number {
-  if (named && found.builder.id === named) return 0;
-  if (found.rough.wraps) return 1;
-  return 2;
+  if (found.builder.id === "make") return 0;
+  if (named && found.builder.id === named) return 1;
+  if (found.rough.wraps) return 2;
+  return 3;
 }
 
 // addExtra adds the tasks .mayoi/builders.json gives by hand, after the

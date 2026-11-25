@@ -70,10 +70,10 @@ description is the build system, as `make` or `gradle`.
 | Make | `GNUmakefile`, `Makefile`, `makefile` | its recipes |
 | Xcode | `<name>.xcodeproj`, `<name>.xcworkspace` | schemes, from `xcodebuild -list` |
 
-A folder may have several. When a Makefile's recipes run another build
-system that is here as well, that one comes first and the Makefile second:
-a Makefile holding one `swift build` line is a shell over Swift, and
-Swift is where the tasks are.
+A folder may have several. When a `Makefile` is present, it takes the
+first group and any other detected build systems (such as Xcode, Go, or
+Swift) are listed as the second group, unless `.mayoi/builders.json`
+sets `prefer`.
 
 Of a Makefile, every target it declares is a task, `install` among them,
 and only a target that builds is of the build group: `sign`, `install`

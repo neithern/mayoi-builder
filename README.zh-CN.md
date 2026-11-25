@@ -66,9 +66,9 @@ mayoi plugin install neithern/mayoi-builder
 | Make | `GNUmakefile`、`Makefile`、`makefile` | 它的配方 |
 | Xcode | `<同名>.xcodeproj`、`<同名>.xcworkspace` | scheme，来自 `xcodebuild -list` |
 
-一个文件夹可以有多个。当某个 Makefile 的配方调用了**另一个也在场的**构建系统时，
-被调用的那个排前面，Makefile 排后面：只写了一行 `swift build` 的 Makefile
-是 Swift 的一层壳，任务在 Swift 那边。
+一个文件夹可以有多个构建器。当存在 `Makefile` 时，`make` 排在第一组，
+项目里同时检测到的其他构建器（如 Xcode、Go、Swift 等）作为第二组列在下方；
+也可通过 `.mayoi/builders.json` 的 `prefer` 手动指定默认组。
 
 对一个 Makefile 来说，它声明的每个 target 都是一条任务，`install` 也不例外；
 但只有真正做构建的 target 才归入 build 组：`sign`、`install`、`release`

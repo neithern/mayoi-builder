@@ -71,20 +71,61 @@ async function read(path: string): Promise<string | null> {
 }
 
 // findBundle checks for a workspace or project bundle sharing the folder's
-// name at the root, or one level down in a same-name subfolder (as
-// QuickMD/QuickMD.xcodeproj in a repo named quickmd): at most four stat
-// calls and no directory listing. A workspace takes precedence when both
-// exist, as with CocoaPods projects.
+// name (including a compact form with hyphens/underscores removed, as
+// CoreEQ.xcodeproj in core-eq) at the root or one level down in a same-name
+// subfolder, and falls back to any bundle explicitly named in a root
+// Makefile. Zero directory listing.
 async function findBundle(root: string): Promise<string | null> {
   const name = basename(root);
   if (!name) return null;
-  const candidates: [string, string][] = [
-    [name + ".xcworkspace", "contents.xcworkspacedata"],
-    [name + ".xcodeproj", "project.pbxproj"],
-    [name + "/" + name + ".xcworkspace", "contents.xcworkspacedata"],
-    [name + "/" + name + ".xcodeproj", "project.pbxproj"],
-  ];
+  const names = [name];
+  const compact = name.replace(/[-_\s]+/g, "");
+  if (compact && compact.toLowerCase() !== name.toLowerCase()) {
+    names.push(compact);
+  }
+  const candidates: [string, string][] = [];
+  for (const n of names) {
+    candidates.push(
+      [n + ".xcworkspace", "contents.xcworkspacedata"],
+      [n + ".xcodeproj", "project.pbxproj"],
+      [n + "/" + n + ".xcworkspace", "contents.xcworkspacedata"],
+      [n + "/" + n + ".xcodeproj", "project.pbxproj"],
+    );
+  }
   for (const [bundle, marker] of candidates) {
+    if (await existsFile(root + "/" + bundle + "/" + marker)) {
+      return bundle;
+    }
+  }
+  // If a root Makefile invokes xcodebuild on a bundle whose name differs from
+  // the folder, resolve that bundle path from the Makefile without listing.
+  return await bundleFromMakefile(root);
+}
+
+async function bundleFromMakefile(root: string): Promise<string | null> {
+  let text: string | null = null;
+  for (const file of ["GNUmakefile", "Makefile", "makefile"]) {
+    text = await read(root + "/" + file);
+    if (text !== null) break;
+  }
+  if (!text || !/\bxcodebuild\b/.test(text)) return null;
+
+  const vars: { [k: string]: string } = {};
+  for (const line of text.split("\n")) {
+    const m = line.match(/^\s*([A-Za-z_][\w]*)\s*(?::=|\?=|=)\s*([^\n#]+)/);
+    if (m) vars[m[1]] = m[2].trim();
+  }
+  const expand = (s: string) =>
+    s.replace(/\$\(([A-Za-z_][\w]*)\)|\$\{([A-Za-z_][\w]*)\}/g, (_, a, b) => vars[a || b] ?? "");
+
+  const seen = new Set<string>();
+  const re = /-(?:workspace|project)\s+([^\s'"]+\.(?:xcworkspace|xcodeproj))/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const bundle = expand(m[1]).replace(/^\.\//, "");
+    if (!bundle || bundle.includes("$") || seen.has(bundle)) continue;
+    seen.add(bundle);
+    const marker = bundle.endsWith(".xcworkspace") ? "contents.xcworkspacedata" : "project.pbxproj";
     if (await existsFile(root + "/" + bundle + "/" + marker)) {
       return bundle;
     }
