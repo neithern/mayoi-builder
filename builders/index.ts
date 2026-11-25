@@ -61,6 +61,7 @@ export interface Config {
   prefer?: BuilderId;
   extra: { label: string; builder: BuilderId; command?: string; args?: string[] }[];
   cmake: { policyMin: "auto" | "off" | string; buildDir: string };
+  xcode: { signing: boolean; destination?: string };
   timeout: number;
 }
 
@@ -69,6 +70,7 @@ const defaultConfig: Config = {
   disable: [],
   extra: [],
   cmake: { policyMin: "auto", buildDir: "build" },
+  xcode: { signing: false },
   timeout: 15000,
 };
 
@@ -94,6 +96,12 @@ export async function readConfig(root: string): Promise<{ config: Config; error?
     cmake: {
       policyMin: raw.cmake && raw.cmake.policyMin !== undefined ? raw.cmake.policyMin : "auto",
       buildDir: (raw.cmake && raw.cmake.buildDir) || "build",
+    },
+    xcode: {
+      signing: !!(raw.xcode && raw.xcode.signing === true),
+      destination: raw.xcode && typeof raw.xcode.destination === "string" && raw.xcode.destination
+        ? raw.xcode.destination
+        : undefined,
     },
     timeout: typeof raw.timeout === "number" && raw.timeout > 0 ? raw.timeout : defaultConfig.timeout,
   };
@@ -191,7 +199,7 @@ export async function scan(
     // tool that is missing leaves the guess as it was.
     if (!rough.targets.length && builder.ask) {
       try {
-        const asked = await builder.ask(root, rough);
+        const asked = await builder.ask(root, rough, config);
         if (asked && asked.length) rough.targets = asked;
       } catch (e) {
         notes.push(builder.id + ": " + String(e));
@@ -207,7 +215,7 @@ export async function scan(
     // default, and no other, says so: a task that says it is the default
     // when it is not is worse than one that does not say so at all.
     entry.isDefault = entry === found[0];
-    entry.tasks = entry.builder.tasks(entry.rough, entry.rough.targets, entry.isDefault);
+    entry.tasks = entry.builder.tasks(entry.rough, entry.rough.targets, entry.isDefault, config);
   }
   addExtra(found, config);
   return { root, found, notes, config };

@@ -121,6 +121,12 @@ export interface Rough {
   // when it is not a fixed file name: Xcode's <name>.xcodeproj or
   // <name>.xcworkspace.
   bundle?: string;
+  // platform is the target OS a project builds for when a build system
+  // needs it to pick a destination or a run command (e.g. Xcode "macos" / "ios").
+  platform?: "macos" | "ios";
+  // destination is the xcodebuild -destination value discovered for an iOS
+  // project or set in .mayoi/builders.json.
+  destination?: string;
 }
 
 // Target is one thing a build system can build.
@@ -185,10 +191,10 @@ export interface Builder {
   // targets that guess could not read. It returns the targets it could
   // name, and may return none: a tool that is missing, too old or slow to
   // answer leaves the guess standing.
-  ask?(root: string, rough: Rough): Promise<Target[] | null>;
+  ask?(root: string, rough: Rough, config?: unknown): Promise<Target[] | null>;
   // tasks makes the tasks of the targets, each one a command a person
   // could have typed. isDefault marks the one Build runs.
-  tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[];
+  tasks(rough: Rough, targets: Target[], isDefault: boolean, config?: unknown): Task[];
 }
 
 // markerFiles are every file a build system is found by, all of them at
