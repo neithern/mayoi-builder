@@ -117,6 +117,10 @@ export interface Rough {
   // is a pnpm project, and npm would resolve other modules than the ones
   // it was set up with. Empty when the build system names one program.
   tool?: string;
+  // bundle is the project bundle a build system names its commands by,
+  // when it is not a fixed file name: Xcode's <name>.xcodeproj or
+  // <name>.xcworkspace.
+  bundle?: string;
 }
 
 // Target is one thing a build system can build.
@@ -170,6 +174,10 @@ export interface Builder {
   // markers are the files whose presence at the folder's root says this
   // build system is here, relative to the root.
   markers: string[];
+  // present finds a build system whose marker is named after the folder
+  // (as <folder>.xcodeproj/project.pbxproj), without listing the folder.
+  // Used when markers is empty.
+  present?(root: string): Promise<boolean>;
   // guess reads the project's files. It never runs a program and never
   // writes one: a folder is scanned without being changed.
   guess(root: string): Promise<Rough | null>;

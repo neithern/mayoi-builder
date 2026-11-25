@@ -141,13 +141,19 @@ function stripJSONC(text: string): string {
 export async function present(root: string, config?: Config): Promise<Builder[]> {
   const here: Builder[] = [];
   for (const builder of builders) {
-    if (builder.markers.length === 0) continue; // found another way, on asking
     if (config && config.disable.includes(builder.id)) continue;
     let seen = false;
-    for (const marker of builder.markers) {
+    if (builder.markers.length > 0) {
+      for (const marker of builder.markers) {
+        try {
+          const info = await workspace.stat(root + "/" + marker);
+          if (info && !info.isDir) { seen = true; break; }
+        } catch (e) {
+        }
+      }
+    } else if (builder.present) {
       try {
-        const info = await workspace.stat(root + "/" + marker);
-        if (info && !info.isDir) { seen = true; break; }
+        seen = await builder.present(root);
       } catch (e) {
       }
     }

@@ -995,7 +995,7 @@ views.onShow("builder.list", async () => {
 events.on("editor.didSave", (e: any) => {
   const path = e?.path || "";
   if (!path) return;
-  for (const marker of ["Cargo.toml", "CMakeLists.txt", "meson.build", "Package.swift", "GNUmakefile", "Makefile", "makefile", "builders.json"]) {
+  for (const marker of ["Cargo.toml", "CMakeLists.txt", "meson.build", "Package.swift", "GNUmakefile", "Makefile", "makefile", "project.pbxproj", "contents.xcworkspacedata", "builders.json"]) {
     if (path.endsWith("/" + marker)) {
       scanned = null;
       void scanFolder();

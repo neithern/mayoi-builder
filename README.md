@@ -62,7 +62,7 @@ description is the build system, as `make` or `gradle`.
 | npm | `package.json` | its scripts |
 | Swift PM | `Package.swift` | `.executable(name:)`, `.library(name:)` |
 | Make | `GNUmakefile`, `Makefile`, `makefile` | its recipes |
-| Xcode | `*.xcodeproj` | schemes, on asking |
+| Xcode | `<name>.xcodeproj`, `<name>.xcworkspace` | schemes, from `xcodebuild -list` |
 
 A folder may have several. When a Makefile's recipes run another build
 system that is here as well, that one comes first and the Makefile second:
@@ -98,6 +98,16 @@ Tasks are the `scripts` of `package.json`, and only the ones that are
 there. A lockfile decides which package manager runs them: `pnpm-lock.yaml`
 makes them `pnpm` scripts, since npm would resolve modules the folder was
 not set up with.
+
+### Xcode
+
+To avoid listing the folder, a scan checks only for a workspace or project
+bundle that shares the folder's name (`<name>.xcworkspace` or
+`<name>.xcodeproj`, at the root or inside a same-name subfolder), at most
+four `stat` calls. Schemes come from `xcodebuild -list -json`, with the
+folder's name as fallback when `xcodebuild` is not available. Build and
+test pass `CODE_SIGNING_ALLOWED=NO` so cloned projects with another
+author's `DEVELOPMENT_TEAM` still build without their signing certificate.
 
 ## How it reads a project
 

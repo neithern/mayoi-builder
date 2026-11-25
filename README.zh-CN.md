@@ -58,7 +58,7 @@ mayoi plugin install neithern/mayoi-builder
 | npm | `package.json` | 它的 scripts |
 | Swift PM | `Package.swift` | `.executable(name:)`、`.library(name:)` |
 | Make | `GNUmakefile`、`Makefile`、`makefile` | 它的配方 |
-| Xcode | `*.xcodeproj` | scheme，需要询问 |
+| Xcode | `<同名>.xcodeproj`、`<同名>.xcworkspace` | scheme，来自 `xcodebuild -list` |
 
 一个文件夹可以有多个。当某个 Makefile 的配方调用了**另一个也在场的**构建系统时，
 被调用的那个排前面，Makefile 排后面：只写了一行 `swift build` 的 Makefile
@@ -89,6 +89,14 @@ Android 项目的**默认构建**是 `assembleDebug`，不是 `build`。`build` 
 任务是 `package.json` 的 `scripts`，而且**只生成确实存在的那些**。
 锁文件决定用哪个包管理器跑它们：有 `pnpm-lock.yaml` 就用 `pnpm` 跑，
 因为 npm 会解析到与这个文件夹安装时不同的模块。
+
+### Xcode
+
+为了不列目录，扫描只按与文件夹同名的 bundle 探测（根目录或同名子目录下的
+`<同名>.xcworkspace` / `<同名>.xcodeproj`），最多四次 `stat` 调用。scheme 来自
+`xcodebuild -list -json`；本机没有 `xcodebuild` 时退回使用项目同名
+作为 scheme。构建和测试默认带 `CODE_SIGNING_ALLOWED=NO`，避免克隆下来的
+项目因 `pbxproj` 里写着原作者的 `DEVELOPMENT_TEAM` 而报缺签名证书。
 
 ## 它怎么读项目
 
