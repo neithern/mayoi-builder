@@ -31,6 +31,8 @@ mayoi plugin install neithern/mayoi-builder
 | 命令 | 作用 |
 | --- | --- |
 | **默认构建**（`builder.build`） | 跑文件夹的默认构建 |
+| **默认测试**（`builder.test`） | 跑文件夹的默认测试 |
+| **停止正在运行的任务**（`builder.stop`） | 中止正在运行的任务及其子进程组 |
 | **运行构建任务…**（`builder.run`） | 列出找到的全部任务 |
 | **重新运行上次构建任务**（`builder.rerunLast`） | 跑上一次跑过的那个 |
 | **重新扫描构建器**（`builder.reload`） | 重新读文件夹 |
@@ -126,6 +128,10 @@ Android 项目的**默认构建**是 `assembleDebug`，不是 `build`。`build` 
   "cmake": {
     "policyMin": "auto",            // "auto"、"off"，或一个版本号
     "buildDir": "build"
+  },
+  "xcode": {
+    "signing": false,               // true 表示启用工程自带签名
+    "destination": ""               // 手动指定 xcodebuild -destination
   }
 }
 ```

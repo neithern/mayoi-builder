@@ -33,6 +33,8 @@ once would put two task panels in the sidebar.
 | Command | What |
 | --- | --- |
 | **Default Build** (`builder.build`) | Runs the folder's default build |
+| **Default Test** (`builder.test`) | Runs the folder's default test |
+| **Stop Running Task** (`builder.stop`) | Stops a running task and its child processes |
 | **Run Build Task…** (`builder.run`) | Lists every task found |
 | **Rerun Last Build task** (`builder.rerunLast`) | Runs the one that ran last |
 | **Scan Builders Again** (`builder.reload`) | Reads the folder again |
@@ -141,6 +143,10 @@ Optional, in the folder. Comments and trailing commas are allowed.
   "cmake": {
     "policyMin": "auto",            // "auto", "off", or a version
     "buildDir": "build"
+  },
+  "xcode": {
+    "signing": false,               // true to use Xcode's configured signing
+    "destination": ""               // override xcodebuild -destination
   }
 }
 ```
