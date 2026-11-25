@@ -31,6 +31,7 @@ async function guess(root: string): Promise<Rough | null> {
   // A root that is a package has targets of its own, as [[bin]] name or as
   // src/main.rs, which is a binary nobody named. A root that is only a
   // workspace has none, and its members are the whole of it.
+  const hasPackage = /^\[package\]/m.test(text);
   const self = packageTargets(text);
   const name = packageName(text) || basename(root);
   const seen = new Set<string>();
@@ -40,10 +41,13 @@ async function guess(root: string): Promise<Rough | null> {
     seen.add(key);
     targets.push(target);
   };
-  if (self.length === 1 && self[0].name === "") {
-    push({ name, kind: "bin", detail: "package" });
-  } else {
-    for (const target of self) push(target);
+  let rootBins = 0;
+  for (const target of self) {
+    if (target.kind === "bin" && target.name) rootBins++;
+    if (target.name) push(target);
+  }
+  if (hasPackage && rootBins === 0 && (await existsFile(root + "/src/main.rs"))) {
+    push({ name, kind: "bin", detail: "src/main.rs" });
   }
 
   // A workspace names its members, and each is read for its own targets.
@@ -51,15 +55,12 @@ async function guess(root: string): Promise<Rough | null> {
   let readCount = 0;
   for (const member of members) {
     if (readCount >= memberLimit) break;
-    const memberText = await read(join(root, member) + "/Cargo.toml");
+    const memberDir = join(root, member);
+    const memberText = await read(memberDir + "/Cargo.toml");
     if (memberText === null) continue;
     readCount++;
     const memberName = packageName(memberText) || basename(member);
     const own = packageTargets(memberText);
-    if (own.length === 0) {
-      push({ name: memberName, kind: "member", detail: member });
-      continue;
-    }
     // A member's binaries are its own to build, and a member with a
     // library and no binary builds under its package name.
     let bins = 0;
@@ -67,6 +68,10 @@ async function guess(root: string): Promise<Rough | null> {
       if (target.kind !== "bin" || !target.name) continue;
       bins++;
       push({ name: target.name, kind: "bin", detail: memberName });
+    }
+    if (bins === 0 && (await existsFile(memberDir + "/src/main.rs"))) {
+      bins++;
+      push({ name: memberName, kind: "bin", detail: member });
     }
     if (bins === 0) push({ name: memberName, kind: "member", detail: member });
   }
@@ -184,6 +189,15 @@ async function read(path: string): Promise<string | null> {
     return await workspace.readFile(path);
   } catch {
     return null;
+  }
+}
+
+async function existsFile(path: string): Promise<boolean> {
+  try {
+    const info = await workspace.stat(path);
+    return !!info && !info.isDir;
+  } catch {
+    return false;
   }
 }
 

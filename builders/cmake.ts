@@ -45,10 +45,11 @@ async function guess(root: string): Promise<Rough | null> {
     if (text === null) return;
     const parsed = parse(text);
     title = title || parsed.title;
+    const rel = dir === root ? "" : dir.slice(root.replace(/\/+$/, "").length + 1);
     for (const target of parsed.targets) {
       if (seen.has(target.name)) continue;
       seen.add(target.name);
-      targets.push(target);
+      targets.push(rel ? { ...target, path: rel } : target);
     }
     for (const note of parsed.notes) notes.push(note);
     if (depth >= subdirDepth) return;
@@ -160,6 +161,22 @@ function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
       // the full build does, then builds the one target.
       command: `if [ -f ${dir}/CMakeCache.txt ] && { [ -f ${dir}/build.ninja ] || [ -f ${dir}/Makefile ]; }; then cmake --build ${dir} --target ${target.name}; else ${configure} && cmake --build ${dir} --target ${target.name}; fi`,
       group: "build",
+      detail: target.detail,
+      builder: "cmake",
+      problemMatcher: matcher("compilers"),
+    });
+  }
+  for (const target of targets) {
+    if (target.kind !== "executable") continue;
+    const buildOne = `if [ -f ${dir}/CMakeCache.txt ] && { [ -f ${dir}/build.ninja ] || [ -f ${dir}/Makefile ]; }; then cmake --build ${dir} --target ${target.name}; else ${configure} && cmake --build ${dir} --target ${target.name}; fi`;
+    const bin = target.path ? `./${dir}/${target.path}/${target.name}` : `./${dir}/${target.name}`;
+    const runBin = target.path
+      ? `if [ -x ${bin} ]; then ${bin}; else ./${dir}/${target.name}; fi`
+      : bin;
+    out.push({
+      label: "run " + target.name,
+      type: "shell",
+      command: `${buildOne} && ${runBin}`,
       detail: target.detail,
       builder: "cmake",
       problemMatcher: matcher("compilers"),

@@ -41,10 +41,11 @@ async function guess(root: string): Promise<Rough | null> {
     // meson.project_name(), which is how a target is usually named.
     const parsed = parse(text, title);
     title = title || parsed.title;
+    const rel = dir === root ? "" : dir.slice(root.replace(/\/+$/, "").length + 1);
     for (const target of parsed.targets) {
       if (seen.has(target.name)) continue;
       seen.add(target.name);
-      targets.push(target);
+      targets.push(rel ? { ...target, path: rel } : target);
     }
     if (depth >= subdirDepth) return;
     for (const sub of parsed.subdirs) {
@@ -160,6 +161,19 @@ function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
       args: ["compile", "-C", dir, target.name],
       group: "build",
       detail: target.guessed ? "meson · " + target.detail + " · " + (target.detail || "") : target.detail,
+      builder: "meson",
+      problemMatcher: matcher("compilers"),
+    });
+  }
+  for (const target of targets) {
+    if (target.kind !== "executable" || target.guessed) continue;
+    const buildOne = `if [ -f ${dir}/build.ninja ]; then meson compile -C ${dir} ${target.name}; else meson setup ${dir} && meson compile -C ${dir} ${target.name}; fi`;
+    const bin = target.path ? `./${dir}/${target.path}/${target.name}` : `./${dir}/${target.name}`;
+    out.push({
+      label: "run " + target.name,
+      type: "shell",
+      command: `${buildOne} && ${bin}`,
+      detail: target.detail,
       builder: "meson",
       problemMatcher: matcher("compilers"),
     });

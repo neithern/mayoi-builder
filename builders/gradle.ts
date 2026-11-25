@@ -47,7 +47,8 @@ async function guess(root: string): Promise<Rough | null> {
   // tasks are the root project's.
   const named = settings.match(/^\s*rootProject\.name\s*=\s*['"]([^'"]+)['"]/m);
 
-  const android = await isAndroid(root);
+  const kind = await detectKind(root);
+  const android = kind === "android";
   const notes: Note[] = [];
   // An Android project builds only with an SDK, which is named in the
   // project's local.properties or in the environment. Neither is something
@@ -59,9 +60,9 @@ async function guess(root: string): Promise<Rough | null> {
   return {
     targets,
     title: named ? named[1] : undefined,
-    // Whether this is an Android project rides on the result as the word
-    // the tasks read: it is not a target, and it is not something to show.
-    tool: android ? "android" : undefined,
+    // The project flavor rides on tool for tasks() to read: "android",
+    // "spring" (bootRun), or "app" (application plugin's run).
+    tool: kind || undefined,
     notes,
   };
 }
@@ -74,15 +75,20 @@ async function hasSdk(root: string): Promise<boolean> {
   return false;
 }
 
-// isAndroid says whether a build file asks for the Android plugin, which
-// is what decides between "assembleDebug" and "build".
-async function isAndroid(root: string): Promise<boolean> {
+// detectKind reads build.gradle(.kts) to tell whether this is an Android
+// project, a Spring Boot service, or a JVM application with a run task.
+async function detectKind(root: string): Promise<"android" | "spring" | "app" | ""> {
+  let found: "spring" | "app" | "" = "";
   for (const name of ["build.gradle", "build.gradle.kts", "app/build.gradle", "app/build.gradle.kts"]) {
     const text = await read(root + "/" + name);
     if (!text) continue;
-    if (/com\.android\.(application|library)|android-application|android-library/.test(text)) return true;
+    if (/com\.android\.(application|library)|android-application|android-library/.test(text)) return "android";
+    if (!found && /org\.springframework\.boot/.test(text)) found = "spring";
+    else if (!found && (/\bid\s*\(?\s*['"]application['"]\s*\)?/.test(text) || /\bapply\s+plugin\s*:\s*['"]application['"]/.test(text) || /^\s*application\s*\{/m.test(text))) {
+      found = "app";
+    }
   }
-  return false;
+  return found;
 }
 
 // tasks are what a person would type: the wrapper, the build type's task,
@@ -129,6 +135,18 @@ function tasks(rough: Rough, targets: Target[], isDefault: boolean): Task[] {
       args: [":" + target.name + ":" + buildTask],
       group: "build",
       detail: target.detail,
+      builder: "gradle",
+      problemMatcher: matcher("compilers"),
+    });
+  }
+  if (rough.tool === "spring" || rough.tool === "app") {
+    const runTask = rough.tool === "spring" ? "bootRun" : "run";
+    out.push({
+      label: "run",
+      type: "process",
+      command: "./gradlew",
+      args: [runTask],
+      detail: "gradlew · " + runTask,
       builder: "gradle",
       problemMatcher: matcher("compilers"),
     });
