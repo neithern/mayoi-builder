@@ -62,7 +62,11 @@ description is the build system, as `make` or `gradle`.
 | Gradle | `build.gradle`, `settings.gradle` | modules, from `include` |
 | Meson | `meson.build` | `executable()`, `library()` |
 | npm | `package.json` | its scripts |
+| Python | `pyproject.toml` | `[project.scripts]`, pytest, ruff, mypy, build |
 | Swift PM | `Package.swift` | `.executable(name:)`, `.library(name:)` |
+| Zig | `build.zig` | `b.step()` targets |
+| Just | `justfile`, `Justfile`, `.justfile` | its recipes |
+| Task | `Taskfile.yml`, `Taskfile.yaml` | its tasks |
 | Make | `GNUmakefile`, `Makefile`, `makefile` | its recipes |
 | Xcode | `<name>.xcodeproj`, `<name>.xcworkspace` | schemes, from `xcodebuild -list` |
 

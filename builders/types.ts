@@ -37,7 +37,20 @@ export interface Matcher {
 }
 
 // BuilderId is one build system this plugin knows.
-export type BuilderId = "cargo" | "cmake" | "go" | "gradle" | "meson" | "npm" | "swift" | "make" | "xcode";
+export type BuilderId =
+  | "cargo"
+  | "cmake"
+  | "go"
+  | "gradle"
+  | "meson"
+  | "npm"
+  | "python"
+  | "swift"
+  | "zig"
+  | "just"
+  | "task"
+  | "make"
+  | "xcode";
 
 // Problem is a matcher of a build system's own, named for the messages it
 // reads. Every build system that compiles C, C++ or Swift says a problem
@@ -210,7 +223,14 @@ export const markerFiles: string[] = [
   "settings.gradle.kts",
   "meson.build",
   "package.json",
+  "pyproject.toml",
   "Package.swift",
+  "build.zig",
+  "justfile",
+  "Justfile",
+  ".justfile",
+  "Taskfile.yml",
+  "Taskfile.yaml",
   "GNUmakefile",
   "Makefile",
   "makefile",

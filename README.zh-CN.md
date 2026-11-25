@@ -58,7 +58,11 @@ mayoi plugin install neithern/mayoi-builder
 | Gradle | `build.gradle`、`settings.gradle` | 模块，来自 `include` |
 | Meson | `meson.build` | `executable()`、`library()` |
 | npm | `package.json` | 它的 scripts |
+| Python | `pyproject.toml` | `[project.scripts]`、pytest、ruff、mypy、build |
 | Swift PM | `Package.swift` | `.executable(name:)`、`.library(name:)` |
+| Zig | `build.zig` | `b.step()` 自定义步骤 |
+| Just | `justfile`、`Justfile`、`.justfile` | 它的配方 |
+| Task | `Taskfile.yml`、`Taskfile.yaml` | 它的任务 |
 | Make | `GNUmakefile`、`Makefile`、`makefile` | 它的配方 |
 | Xcode | `<同名>.xcodeproj`、`<同名>.xcworkspace` | scheme，来自 `xcodebuild -list` |
 

@@ -24,14 +24,18 @@ import go from "./go";
 import gradle from "./gradle";
 import meson from "./meson";
 import npm from "./npm";
+import python from "./python";
 import swift from "./swift";
+import zig from "./zig";
+import just from "./just";
+import task from "./task";
 import make from "./make";
 import xcode from "./xcode";
 
 // builders are the build systems known, in the order the panel tries them
 // when nothing else says which one builds: the one that builds the most
 // projects first.
-const builders: Builder[] = [cargo, cmake, go, gradle, meson, npm, swift, make, xcode];
+const builders: Builder[] = [cargo, cmake, go, gradle, meson, npm, python, swift, zig, just, task, make, xcode];
 
 // Found is a build system a folder has.
 export interface Found {
