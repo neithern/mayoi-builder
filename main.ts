@@ -171,6 +171,11 @@ function taskKey(task: Task): string {
   return task.builder ? task.builder + "\u00b7" + task.label : task.label;
 }
 
+// builderLabel formats a builder id for display with an uppercase initial.
+function builderLabel(id: string): string {
+  return id ? id[0].toUpperCase() + id.slice(1) : id;
+}
+
 // variable is the value of one of VS Code's variables, or null for one
 // that names a file while no editor of one has the keyboard.
 // ported from mayoi-tasks
@@ -485,7 +490,7 @@ async function renderListNow(): Promise<void> {
       ? say("builder.runningMark")
       : notes.length
         ? notes.join(" · ")
-        : entry.builder.id;
+        : builderLabel(entry.builder.id);
     const rows = entry.tasks.map((task) => {
       const key = taskKey(task);
       const was = history[key];
@@ -1003,7 +1008,7 @@ async function pickTask(): Promise<Task | undefined> {
   // A label of a build system's own would be the same for two of them,
   // as every build system names its build "build", so the name says which
   // one: a person picking a task picks the build system's.
-  const name = (task: Task) => (task.builder ? task.builder + " · " + task.label : task.label);
+  const name = (task: Task) => (task.builder ? builderLabel(task.builder) + " · " + task.label : task.label);
   const chose = await window.pick(
     order.map((task) => {
       const g = groupKind(task.group);
@@ -1086,7 +1091,7 @@ commands.register("builder.stop", async () => {
   const chose = await window.pick(
     keys.map((k) => {
       const task = taskAt(k);
-      return { label: task ? (task.builder ? task.builder + " · " + task.label : task.label) : k, description: k };
+      return { label: task ? (task.builder ? builderLabel(task.builder) + " · " + task.label : task.label) : k, description: k };
     }),
     { placeholder: say("builder.stop") },
   );
@@ -1129,11 +1134,11 @@ commands.register("builder.inspect", async () => {
     return;
   }
   const chose = await window.pick(
-    scanned.found.map((f) => ({ label: f.builder.id, description: f.rough.title || "" })),
+    scanned.found.map((f) => ({ label: builderLabel(f.builder.id), description: f.rough.title || "" })),
     { placeholder: say("builder.inspect") },
   );
   if (!chose) return;
-  const entry = scanned.found.find((f) => f.builder.id === chose.label);
+  const entry = scanned.found.find((f) => builderLabel(f.builder.id) === chose.label);
   const ask = entry?.builder.ask;
   if (!entry || !ask) {
     await window.notify("Builders: " + chose.label);

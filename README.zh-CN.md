@@ -46,7 +46,7 @@ mayoi plugin install neithern/mayoi-builder
 而且这行文字可以直接选中复制。
 
 面板按项目分组：组名用构建系统自己声明的名字，没声明就用文件夹名；
-组的 description 是构建系统类型，比如 `make`、`gradle`。
+组的 description 是构建系统类型，比如 `Make`、`Gradle`。
 
 ## 能识别什么
 

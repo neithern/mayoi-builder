@@ -50,7 +50,7 @@ a click, and it is there to be selected and copied.
 
 The panel groups the tasks by project: a group is named for the name its
 build system declares, or for the folder when it declares none, and its
-description is the build system, as `make` or `gradle`.
+description is the build system, as `Make` or `Gradle`.
 
 ## What it finds
 
